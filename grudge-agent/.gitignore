@@ -2,6 +2,7 @@ node_modules/
 .env
 .gruda-agent/
 gruda-projects/
+.vercel/
 *.log
 *.gif
 .DS_Store

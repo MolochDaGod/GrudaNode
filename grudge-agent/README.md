@@ -53,13 +53,30 @@ Works from VSCode terminal, Cursor, Warp, JetBrains, or any shell.
 |---|---|
 | 🤖 **Agentic AI** | File search/read/write, web search, shell commands, folder creation |
 | 🧠 **Project memory** | `gruda.md` per project — agent remembers your goals, stack, preferences |
+| 🖥️ **Built-in IDE** | Monaco editor with live file tree, one-click **Run**, and **AI Snippet** generation |
+| 🎨 **Asset browser** | Search & grab 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and Grudge Studio |
 | 💬 **Treaty Chat** | Live community chat — all GRUDA Agent users share one room |
 | 🎤 **Voice input / TTS** | Browser-native Web Speech API — no keys, no account |
 | 🌊 **Streaming** | Token-by-token streaming for both chat and agent modes |
 | 📋 **Session history** | Past sessions on splash screen with AI recaps |
 | 🧙 **First-run wizard** | AI-guided onboarding generates your personal system prompt |
 | ☁️ **Cloud & Deploy** | Push to GitHub, deploy to Vercel/Railway/Puter, sync to Google Drive |
-| 🔌 **IDE friendly** | `npx gruda-agent` works from any terminal/IDE |
+| 🗄️ **Optional Postgres** | Set `DATABASE_URL` to persist session history; falls back to local JSON |
+| 🔌 **Runs anywhere** | `npx gruda-agent` works from any terminal or IDE (VSCode, Cursor, Warp, JetBrains) |
+
+---
+
+## Interface
+
+The app is a single-page workspace with five tabs:
+
+| Tab | What's inside |
+|---|---|
+| ⚔️ **AI Workspace** | Chat & Agent modes, model picker, voice input/TTS, per-project `gruda.md` memory |
+| 🖥️ **IDE** | Monaco code editor + project file tree, **▶ Run** (Node sandbox), and **✨ AI Snippet** code generation |
+| 🎨 **Assets** | Browse and search 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and Grudge Studio |
+| 💬 **Treaty Chat** | Live community relay shared by every GRUDA Agent user |
+| ☁️ **Cloud & Deploy** | Connect Puter, Google Drive, GitHub, and Vercel — push repos and one-click deploy |
 
 ---
 
@@ -156,6 +173,12 @@ TREATY_CHAT_URL=https://master.grudge-studio.com
 # Optional: Brave Search for richer web results
 BRAVE_SEARCH_KEY=
 
+# Optional: Poly Pizza API key for the Assets browser
+POLY_PIZZA_KEY=
+
+# Optional: Postgres for persistent session history (falls back to local JSON)
+DATABASE_URL=
+
 # Optional: Cloudflare tunnel for public access
 CLOUDFLARE_TUNNEL_TOKEN=
 ```
@@ -204,9 +227,9 @@ Every GRUDA Agent user automatically joins **Treaty Chat** — Grudge Studio's l
 
 ```
 grudge-agent/
-├── server.js           # Express + WebSocket backend (~730 lines)
+├── server.js           # Express + WebSocket backend: agent loop, IDE, assets, cloud, optional Postgres (~920 lines)
 ├── public/
-│   └── index.html      # Full SPA — no build step (~1180 lines)
+│   └── index.html      # Full SPA — no build step (~1220 lines)
 ├── bin/
 │   └── gruda-agent.js  # CLI entry: npx gruda-agent
 ├── Dockerfile          # Docker image
