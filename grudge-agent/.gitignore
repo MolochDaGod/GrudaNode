@@ -1,0 +1,8 @@
+node_modules/
+.env
+.gruda-agent/
+gruda-projects/
+*.log
+*.gif
+.DS_Store
+Thumbs.db

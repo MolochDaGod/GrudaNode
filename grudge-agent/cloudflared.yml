@@ -1,0 +1,16 @@
+# Cloudflare Tunnel config for GRUDA Agent
+# 1. Install cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+# 2. Run: cloudflared tunnel login
+# 3. Run: cloudflared tunnel create gruda-agent
+# 4. Fill in your tunnel UUID below
+# 5. Run: cloudflared tunnel run gruda-agent
+
+tunnel: YOUR_TUNNEL_UUID_HERE
+credentials-file: ~/.cloudflared/YOUR_TUNNEL_UUID_HERE.json
+
+ingress:
+  # Route all traffic to the local GRUDA Agent server
+  - hostname: gruda-agent.YOUR_DOMAIN.com
+    service: http://localhost:3200
+  # Required catch-all
+  - service: http_status:404

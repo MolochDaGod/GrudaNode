@@ -1,0 +1,39 @@
+{
+  "name": "gruda-agent",
+  "version": "1.0.0",
+  "description": "GRUDA Agent - Local agentic AI workspace by Grudge Studio",
+  "main": "server.js",
+  "bin": {
+    "gruda-agent": "./bin/gruda-agent.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "pg": "^8.11.3"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "ollama",
+    "local-ai",
+    "grudge-studio"
+  ],
+  "author": "RacAlvin The Pirate King - Grudge Studio",
+  "license": "MIT",
+  "homepage": "https://github.com/MolochDaGod/GrudaNode#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MolochDaGod/GrudaNode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MolochDaGod/GrudaNode/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

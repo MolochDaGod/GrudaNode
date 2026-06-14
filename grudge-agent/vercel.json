@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "name": "gruda-agent",
+  "builds": [
+    { "src": "server.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "server.js" },
+    { "src": "/(.*)", "dest": "public/$1" }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "TREATY_CHAT_URL": "https://master.grudge-studio.com"
+  },
+  "functions": {
+    "server.js": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  }
+}

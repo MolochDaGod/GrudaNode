@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  gruda-agent:
+    build: .
+    image: grudastudio/gruda-agent:latest
+    container_name: gruda-agent
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3200}:3200"
+    environment:
+      - PORT=3200
+      - OLLAMA_HOST=http://ollama:11434
+      - TREATY_CHAT_URL=${TREATY_CHAT_URL:-https://master.grudge-studio.com}
+      - BRAVE_SEARCH_KEY=${BRAVE_SEARCH_KEY:-}
+      - NODE_ENV=production
+    volumes:
+      - gruda-data:/data
+      - gruda-projects:/projects
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - gruda
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: gruda-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - gruda
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Optional: cloudflared tunnel for public access
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: gruda-tunnel
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     - gruda-agent
+  #   networks:
+  #     - gruda
+
+volumes:
+  gruda-data:
+  gruda-projects:
+  ollama-models:
+
+networks:
+  gruda:
+    driver: bridge
