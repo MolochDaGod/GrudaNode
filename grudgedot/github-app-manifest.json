@@ -1,0 +1,37 @@
+{
+  "name": "Grudge Studio",
+  "description": "Official GitHub App for Grudge Studio — powers grudgedot launcher, game library, and CI/CD automation.",
+  "url": "https://grudge-studio.com",
+  "hook_attributes": {
+    "url": "https://grudgedot.grudge-studio.com/api/webhooks/github",
+    "active": true
+  },
+  "redirect_url": "https://grudgedot.grudge-studio.com/auth/github/callback",
+  "callback_urls": [
+    "https://grudgedot.grudge-studio.com/auth/github/callback",
+    "http://localhost:3300/auth/github/callback"
+  ],
+  "setup_url": "https://grudgedot.grudge-studio.com/setup",
+  "public": false,
+  "default_permissions": {
+    "contents": "read",
+    "metadata": "read",
+    "pull_requests": "write",
+    "statuses": "write",
+    "checks": "write",
+    "issues": "write",
+    "deployments": "write",
+    "actions": "read",
+    "packages": "read"
+  },
+  "default_events": [
+    "push",
+    "pull_request",
+    "release",
+    "deployment",
+    "deployment_status",
+    "check_run",
+    "check_suite",
+    "workflow_run"
+  ]
+}

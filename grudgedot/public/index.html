@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>grudgedot — Grudge Studio Launcher</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #2a2a3a;
+    --accent: #e63946;
+    --accent2: #ff6b35;
+    --gold: #ffd700;
+    --text: #e8e8f0;
+    --muted: #888899;
+    --green: #4ade80;
+    --radius: 10px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* ── Nav ─────────────────────────────────────────── */
+  nav {
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 24px; height: 58px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+  .logo span { color: var(--text); }
+  .logo-badge { background: var(--accent); color: #fff; font-size: 0.55rem; font-weight: 800; padding: 2px 5px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; }
+  nav .spacer { flex: 1; }
+  .nav-search {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 14px; color: var(--text); font-size: 0.875rem; width: 220px;
+    outline: none;
+  }
+  .nav-search:focus { border-color: var(--accent); }
+  .nav-btn {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.875rem;
+    transition: border-color .2s, background .2s;
+  }
+  .nav-btn:hover { border-color: var(--accent); background: #1e1e28; }
+  .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .nav-btn.primary:hover { background: #c1121f; }
+  .user-avatar { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--accent); }
+
+  /* ── Hero Banner ──────────────────────────────────── */
+  .hero {
+    background: linear-gradient(135deg, #0d0d18 0%, #1a0a12 50%, #0a0a1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 40px 24px 36px;
+    position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 70% 50%, rgba(230,57,70,0.12) 0%, transparent 60%);
+  }
+  .hero-inner { max-width: 1200px; margin: 0 auto; position: relative; }
+  .hero h1 { font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin-bottom: 10px; }
+  .hero h1 em { color: var(--accent); font-style: normal; }
+  .hero p { color: var(--muted); font-size: 1rem; max-width: 480px; line-height: 1.5; }
+  .hero-stats { display: flex; gap: 28px; margin-top: 20px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-num { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ── Layout ───────────────────────────────────────── */
+  .layout { display: flex; max-width: 1200px; margin: 0 auto; padding: 24px; gap: 20px; }
+  .sidebar { width: 200px; flex-shrink: 0; }
+  .main { flex: 1; min-width: 0; }
+
+  /* ── Sidebar ──────────────────────────────────────── */
+  .sidebar-section { margin-bottom: 24px; }
+  .sidebar-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; padding: 0 8px; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 7px; cursor: pointer;
+    font-size: 0.875rem; color: var(--muted); transition: all .15s;
+    border: 1px solid transparent;
+  }
+  .sidebar-item:hover { background: var(--card); color: var(--text); }
+  .sidebar-item.active { background: rgba(230,57,70,0.12); border-color: rgba(230,57,70,0.3); color: var(--accent); font-weight: 600; }
+  .sidebar-icon { font-size: 1rem; }
+
+  /* ── Filter Bar ───────────────────────────────────── */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  .filter-chip {
+    padding: 5px 13px; border-radius: 20px; font-size: 0.8rem; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    transition: all .15s;
+  }
+  .filter-chip:hover { border-color: var(--accent); color: var(--text); }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .sort-select {
+    margin-left: auto; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 10px; border-radius: 8px; font-size: 0.8rem; cursor: pointer;
+  }
+
+  /* ── Game Grid ────────────────────────────────────── */
+  #game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+
+  .game-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; cursor: pointer; transition: border-color .2s, transform .2s;
+    position: relative;
+  }
+  .game-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .game-card-thumb {
+    width: 100%; aspect-ratio: 16/9; background: linear-gradient(135deg, #1a0a12, #0a0a1a);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .game-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .game-card-thumb .thumb-fallback { font-size: 2.5rem; opacity: 0.3; }
+  .game-badge {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--accent); color: #fff;
+    font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .game-badge.new { background: var(--green); color: #000; }
+  .game-card-body { padding: 12px 14px 14px; }
+  .game-name { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.2em; }
+  .game-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .game-version { font-size: 0.72rem; background: var(--surface); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; color: var(--muted); }
+  .game-lang { font-size: 0.72rem; color: var(--muted); }
+  .game-stars { font-size: 0.72rem; color: var(--gold); margin-left: auto; }
+  .game-dl-btn {
+    width: 100%; margin-top: 10px;
+    background: var(--accent); border: none; color: #fff;
+    padding: 8px; border-radius: 7px; font-size: 0.82rem; font-weight: 700;
+    cursor: pointer; transition: background .15s;
+  }
+  .game-dl-btn:hover { background: #c1121f; }
+  .game-dl-btn.no-assets { background: var(--surface); color: var(--muted); border: 1px solid var(--border); cursor: default; }
+
+  /* ── Detail Modal ─────────────────────────────────── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    z-index: 200; display: flex; align-items: center; justify-content: center;
+    padding: 20px; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; width: 100%; max-width: 640px; max-height: 90vh;
+    overflow-y: auto; padding: 28px;
+  }
+  .modal-header { display: flex; gap: 16px; margin-bottom: 20px; }
+  .modal-thumb {
+    width: 120px; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;
+    background: linear-gradient(135deg, #1a0a12, #0a0a1a);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .modal-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .modal-info h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
+  .modal-info p { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+  .modal-topics { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .modal-topic { font-size: 0.72rem; background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; color: var(--muted); }
+  .modal-section { margin-top: 20px; }
+  .modal-section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+  .asset-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; background: var(--surface); border-radius: 8px; margin-bottom: 6px;
+  }
+  .asset-name { flex: 1; font-size: 0.85rem; }
+  .asset-size { font-size: 0.75rem; color: var(--muted); }
+  .asset-dl {
+    background: var(--accent); color: #fff; border: none;
+    padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+  }
+  .modal-notes { background: var(--surface); border-radius: 8px; padding: 12px; font-size: 0.82rem; color: var(--muted); line-height: 1.6; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    width: 32px; height: 32px; border-radius: 50%; font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal { position: relative; }
+
+  /* ── Empty / Loading ──────────────────────────────── */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 14px; opacity: 0.4; }
+  .empty-state h3 { font-size: 1rem; margin-bottom: 6px; color: var(--text); }
+  .spinner { display: inline-block; width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-bottom: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Alerts ───────────────────────────────────────── */
+  .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.85rem; }
+  .alert-info { background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.25); color: var(--green); }
+  .alert-warn { background: rgba(255,107,53,0.1); border: 1px solid rgba(255,107,53,0.25); color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ─────────────────────────────────────────── -->
+<nav>
+  <div class="logo">⚔️ grudge<span>dot</span> <span class="logo-badge">Beta</span></div>
+  <div class="spacer"></div>
+  <input class="nav-search" id="search-input" type="text" placeholder="Search games…" oninput="filterGames()">
+  <div id="user-area">
+    <button class="nav-btn primary" onclick="window.location='/auth/login'">Sign in with GitHub</button>
+  </div>
+</nav>
+
+<!-- ── Hero ────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-inner">
+    <h1>Grudge Studio<br><em>Game Library</em></h1>
+    <p>Download and play every game from Grudge Studio — powered by GitHub Releases.</p>
+    <div class="hero-stats">
+      <div class="stat"><div class="stat-num" id="stat-games">—</div><div class="stat-lbl">Games</div></div>
+      <div class="stat"><div class="stat-num" id="stat-releases">—</div><div class="stat-lbl">Total Releases</div></div>
+      <div class="stat"><div class="stat-num" id="stat-stars">—</div><div class="stat-lbl">GitHub Stars</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main Layout ──────────────────────────────────── -->
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Browse</div>
+      <div class="sidebar-item active" data-filter="all" onclick="setSidebarFilter('all',this)">
+        <span class="sidebar-icon">🎮</span> All Games
+      </div>
+      <div class="sidebar-item" data-filter="action" onclick="setSidebarFilter('action',this)">
+        <span class="sidebar-icon">⚔️</span> Action
+      </div>
+      <div class="sidebar-item" data-filter="rpg" onclick="setSidebarFilter('rpg',this)">
+        <span class="sidebar-icon">🧙</span> RPG
+      </div>
+      <div class="sidebar-item" data-filter="puzzle" onclick="setSidebarFilter('puzzle',this)">
+        <span class="sidebar-icon">🧩</span> Puzzle
+      </div>
+      <div class="sidebar-item" data-filter="demo" onclick="setSidebarFilter('demo',this)">
+        <span class="sidebar-icon">🔬</span> Demos
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Links</div>
+      <div class="sidebar-item" onclick="open('https://github.com/MolochDaGod','_blank')">
+        <span class="sidebar-icon">📦</span> GitHub Org
+      </div>
+      <div class="sidebar-item" onclick="open('https://grudge-studio.com','_blank')">
+        <span class="sidebar-icon">🌐</span> Studio Site
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+    <div id="alert-area"></div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-chip active" data-type="all" onclick="setTypeFilter('all',this)">All</div>
+      <div class="filter-chip" data-type="Windows" onclick="setTypeFilter('Windows',this)">Windows</div>
+      <div class="filter-chip" data-type="Linux" onclick="setTypeFilter('Linux',this)">Linux</div>
+      <div class="filter-chip" data-type="Web" onclick="setTypeFilter('Web',this)">Web / Browser</div>
+      <select class="sort-select" onchange="sortGames(this.value)">
+        <option value="updated">Recently Updated</option>
+        <option value="stars">Most Stars</option>
+        <option value="name">Name A–Z</option>
+        <option value="downloads">Most Downloads</option>
+      </select>
+    </div>
+
+    <!-- Game Grid -->
+    <div id="game-grid">
+      <div class="empty-state">
+        <div class="spinner"></div>
+        <h3>Loading game library…</h3>
+        <p>Fetching from GitHub Releases</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Detail Modal ────────────────────────────────── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-body">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+  // ── State ────────────────────────────────────────────
+  let allGames = [];
+  let filtered = [];
+  let sideFilter = 'all';
+  let typeFilter = 'all';
+  let searchQ    = '';
+  let sortMode   = 'updated';
+
+  // ── Auth (from redirect params) ──────────────────────
+  const params = new URLSearchParams(location.search);
+  const ghToken = params.get('token') || localStorage.getItem('gh_token');
+  const ghUser  = params.get('user')  || localStorage.getItem('gh_user');
+  const ghAvatar= params.get('avatar')|| localStorage.getItem('gh_avatar');
+  if (params.get('token')) {
+    localStorage.setItem('gh_token',  ghToken);
+    localStorage.setItem('gh_user',   ghUser);
+    localStorage.setItem('gh_avatar', ghAvatar);
+    history.replaceState(null, '', '/');
+  }
+  if (ghUser) {
+    document.getElementById('user-area').innerHTML = `
+      <img class="user-avatar" src="${decodeURIComponent(ghAvatar)}" alt="${ghUser}" title="${ghUser}">
+      <button class="nav-btn" onclick="logout()">${ghUser}</button>
+    `;
+  }
+  function logout() {
+    localStorage.removeItem('gh_token');
+    localStorage.removeItem('gh_user');
+    localStorage.removeItem('gh_avatar');
+    location.reload();
+  }
+
+  // ── Fetch Games ───────────────────────────────────────
+  async function loadGames() {
+    try {
+      const hdrs = ghToken ? { 'Authorization': `Bearer ${ghToken}` } : {};
+      const r = await fetch('/api/games', { headers: hdrs });
+      if (!r.ok) throw new Error(await r.text());
+      const { games } = await r.json();
+      allGames = games;
+      updateStats();
+      applyFilters();
+    } catch (e) {
+      document.getElementById('game-grid').innerHTML = `
+        <div class="empty-state">
+          <div class="icon">⚠️</div>
+          <h3>Could not load games</h3>
+          <p>${e.message}</p>
+        </div>`;
+    }
+  }
+
+  // ── Stats ─────────────────────────────────────────────
+  function updateStats() {
+    document.getElementById('stat-games').textContent = allGames.length;
+    const totalReleases = allGames.reduce((s,g) => s + (g.latestRelease ? 1 : 0), 0);
+    document.getElementById('stat-releases').textContent = totalReleases;
+    const totalStars = allGames.reduce((s,g) => s + (g.stars||0), 0);
+    document.getElementById('stat-stars').textContent = totalStars;
+  }
+
+  // ── Filters ───────────────────────────────────────────
+  function setSidebarFilter(f, el) {
+    sideFilter = f;
+    document.querySelectorAll('.sidebar-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    applyFilters();
+  }
+  function setTypeFilter(t, el) {
+    typeFilter = t;
+    document.querySelectorAll('.filter-chip').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    applyFilters();
+  }
+  function filterGames() {
+    searchQ = document.getElementById('search-input').value.toLowerCase();
+    applyFilters();
+  }
+  function sortGames(mode) { sortMode = mode; applyFilters(); }
+
+  function applyFilters() {
+    filtered = allGames.filter(g => {
+      if (sideFilter !== 'all' && !g.topics?.includes(sideFilter)) return false;
+      if (typeFilter !== 'all') {
+        const hasType = g.latestRelease?.assets?.some(a => a.name.toLowerCase().includes(typeFilter.toLowerCase()));
+        if (!hasType) return false;
+      }
+      if (searchQ && !g.displayName.toLowerCase().includes(searchQ) && !g.description.toLowerCase().includes(searchQ)) return false;
+      return true;
+    });
+
+    if (sortMode === 'stars') filtered.sort((a,b) => (b.stars||0)-(a.stars||0));
+    else if (sortMode === 'name') filtered.sort((a,b) => a.displayName.localeCompare(b.displayName));
+    else if (sortMode === 'downloads') {
+      filtered.sort((a,b) => {
+        const da = a.latestRelease?.assets?.reduce((s,x)=>s+x.downloadCount,0)||0;
+        const db = b.latestRelease?.assets?.reduce((s,x)=>s+x.downloadCount,0)||0;
+        return db-da;
+      });
+    }
+    renderGrid();
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function renderGrid() {
+    const grid = document.getElementById('game-grid');
+    if (!filtered.length) {
+      grid.innerHTML = `<div class="empty-state"><div class="icon">🎮</div><h3>No games found</h3><p>Try a different filter or search term.</p></div>`;
+      return;
+    }
+    grid.innerHTML = filtered.map(g => gameCard(g)).join('');
+  }
+
+  function gameCard(g) {
+    const hasAssets = g.latestRelease?.assets?.length > 0;
+    const primaryAsset = hasAssets ? g.latestRelease.assets[0] : null;
+    const age = g.latestRelease?.publishedAt ? daysSince(g.latestRelease.publishedAt) : 999;
+    const isNew = age < 14;
+    return `
+    <div class="game-card" onclick="openModal('${g.name}')">
+      <div class="game-card-thumb">
+        <img src="${g.thumbnail}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="thumb-fallback" style="display:none">🎮</div>
+        ${isNew ? '<span class="game-badge new">New</span>' : (g.latestVersion ? `<span class="game-badge">${g.latestVersion}</span>` : '')}
+      </div>
+      <div class="game-card-body">
+        <div class="game-name" title="${g.displayName}">${g.displayName}</div>
+        <div class="game-desc">${g.description || 'A Grudge Studio game.'}</div>
+        <div class="game-meta">
+          ${g.latestVersion ? `<span class="game-version">${g.latestVersion}</span>` : ''}
+          ${g.language ? `<span class="game-lang">${g.language}</span>` : ''}
+          ${g.stars ? `<span class="game-stars">⭐ ${g.stars}</span>` : ''}
+        </div>
+        ${hasAssets
+          ? `<a class="game-dl-btn" href="${primaryAsset.downloadUrl}" download onclick="event.stopPropagation()">⬇ Download (${fmtSize(primaryAsset.size)})</a>`
+          : `<button class="game-dl-btn no-assets">No release assets</button>`}
+      </div>
+    </div>`;
+  }
+
+  // ── Modal ─────────────────────────────────────────────
+  function openModal(name) {
+    const g = allGames.find(x => x.name === name);
+    if (!g) return;
+    const assets = g.latestRelease?.assets || [];
+    document.getElementById('modal-content').innerHTML = `
+      <div class="modal-header">
+        <div class="modal-thumb">
+          <img src="${g.thumbnail}" onerror="this.style.display='none'">
+        </div>
+        <div class="modal-info">
+          <h2>${g.displayName}</h2>
+          <p>${g.description || 'A Grudge Studio game.'}</p>
+          <div class="modal-topics">
+            ${(g.topics||[]).map(t => `<span class="modal-topic">${t}</span>`).join('')}
+            ${g.language ? `<span class="modal-topic">${g.language}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      ${assets.length ? `
+      <div class="modal-section">
+        <div class="modal-section-title">Downloads — ${g.latestVersion}</div>
+        ${assets.map(a => `
+          <div class="asset-row">
+            <span class="asset-name">${a.name}</span>
+            <span class="asset-size">${fmtSize(a.size)}</span>
+            <a class="asset-dl" href="${a.downloadUrl}" download>Download</a>
+          </div>`).join('')}
+      </div>` : ''}
+      ${g.latestRelease?.body ? `
+      <div class="modal-section">
+        <div class="modal-section-title">Release Notes</div>
+        <div class="modal-notes">${escapeHtml(g.latestRelease.body)}</div>
+      </div>` : ''}
+      <div class="modal-section">
+        <a class="asset-dl" href="${g.htmlUrl}/releases" target="_blank" style="text-decoration:none">All Releases on GitHub →</a>
+      </div>
+    `;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+  function closeModal(e) {
+    if (!e || e.target === document.getElementById('modal-overlay') || e.type !== 'click' || e.target.closest('.modal-close')) {
+      document.getElementById('modal-overlay').classList.remove('open');
+    }
+  }
+
+  // ── Utils ─────────────────────────────────────────────
+  function fmtSize(bytes) {
+    if (!bytes) return '?';
+    if (bytes > 1e9) return (bytes/1e9).toFixed(1)+'GB';
+    if (bytes > 1e6) return (bytes/1e6).toFixed(1)+'MB';
+    if (bytes > 1e3) return (bytes/1e3).toFixed(0)+'KB';
+    return bytes+'B';
+  }
+  function daysSince(iso) {
+    return Math.floor((Date.now() - new Date(iso)) / 86400000);
+  }
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  loadGames();
+</script>
+</body>
+</html>

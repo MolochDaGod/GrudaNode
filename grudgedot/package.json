@@ -1,0 +1,21 @@
+{
+  "name": "grudgedot",
+  "version": "0.1.0",
+  "description": "Grudge Studio game launcher — powered by GitHub Releases",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": ["grudge", "studio", "game-launcher", "github-releases"],
+  "license": "MIT"
+}
