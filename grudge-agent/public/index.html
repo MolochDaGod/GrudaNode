@@ -789,16 +789,33 @@ async function initApp() {
   await loadProjects();
   await checkHealth();
   initWS();
+  try {
+    const c = await fetch("/api/config").then(r=>r.json());
+    window.personaSystem = c.systemPrompt || "";
+    window.aiName = c.aiName || "GRUDA";
+    window.voiceId = c.voiceId || "";
+    if (c.displayName) displayName = c.displayName;
+  } catch(e){}
   setInterval(checkHealth,15000);
 }
 
+const PUTER_MODELS = ["gpt-4o-mini","gpt-4o","claude-3-5-sonnet","gemini-2.0-flash","deepseek-chat"];
 async function loadModels() {
-  const d = await fetch("/api/models").then(r=>r.json()).catch(()=>({models:[]}));
   const sel=document.getElementById("model-select");
-  const models=d.models||[];
-  if (!models.length) { sel.innerHTML=`<option value="">No models — run: ollama pull mistral</option>`; return; }
-  sel.innerHTML=models.map(m=>`<option value="${m.name}">${m.name}</option>`).join("");
-  currentModel=models[0].name;
+  const puterOpts=`<optgroup label="Puter (free cloud)">`+
+    PUTER_MODELS.map(m=>`<option value="puter:${m}">${m} (cloud)</option>`).join("")+`</optgroup>`;
+  let ollamaOpts="";
+  try {
+    const d=await fetch("/api/models").then(r=>r.json());
+    const models=d.models||[];
+    if (models.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
+      models.map(m=>`<option value="${m.name}">${m.name} (local)</option>`).join("")+`</optgroup>`;
+  } catch(e){}
+  sel.innerHTML = ollamaOpts + puterOpts;
+  // Prefer a local model if present, otherwise default to a free Puter cloud model
+  const firstLocal = sel.querySelector('optgroup[label^="Local"] option');
+  currentModel = firstLocal ? firstLocal.value : "puter:"+PUTER_MODELS[0];
+  sel.value = currentModel;
 }
 
 async function loadProjects() {
@@ -1165,23 +1182,30 @@ async function send() {
 async function runChat() {
   isStreaming=true; setSend(true);
   const think=addThink("Thinking…");
-  const {msgEl,bodyEl}=addAgentMsg();
+  const {bodyEl}=addAgentMsg();
   let full="";
   try {
-    const res=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel})});
-    think.remove();
-    const rdr=res.body.getReader();const dec=new TextDecoder();let buf="";
-    while(true){
-      const{value,done}=await rdr.read();if(done)break;
-      buf+=dec.decode(value,{stream:true});
-      const lines=buf.split("\n");buf=lines.pop();
-      for(const l of lines){
-        if(!l.startsWith("data: "))continue;
-        try{const j=JSON.parse(l.slice(6));if(j.type==="token"){full+=j.content;bodyEl.textContent=full;scrollBot();}}catch{}
+    if (isPuterModel(currentModel)) {
+      think.remove();
+      const sys = window.personaSystem ? [{role:"system",content:window.personaSystem}] : [];
+      full = await puterChatStream([...sys, ...messages], currentModel, bodyEl);
+    } else {
+      const res=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel})});
+      think.remove();
+      const rdr=res.body.getReader();const dec=new TextDecoder();let buf="";
+      while(true){
+        const{value,done}=await rdr.read();if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split("\n");buf=lines.pop();
+        for(const l of lines){
+          if(!l.startsWith("data: "))continue;
+          try{const j=JSON.parse(l.slice(6));if(j.type==="token"){full+=j.content;bodyEl.innerHTML=mdToHtml(full);scrollBot();}}catch{}
+        }
       }
     }
-  } catch(err){think.remove();bodyEl.textContent="Error: "+err.message;}
+  } catch(err){ try{think.remove();}catch{} bodyEl.textContent="Error: "+err.message; }
   bodyEl.innerHTML=mdToHtml(full);lastResp=full;messages.push({role:"assistant",content:full});
+  if(window.autoSpeak && full) speak(full);
   isStreaming=false;setSend(false);scrollBot();
 }
 
@@ -1200,7 +1224,7 @@ async function runAgent() {
       buf+=dec.decode(value,{stream:true});
       const lines=buf.split("\n");buf=lines.pop();
       for(const l of lines){
-        if(!l.startsWith("data: "))con        if(!l.startsWith("data: ")) continue;
+        if(!l.startsWith("data: ")) continue;
         const raw=l.slice(6).trim();
         if(raw==="[DONE]") break;
         try {
@@ -1217,7 +1241,7 @@ async function runAgent() {
   isStreaming=false; setSend(false); scrollBot();
 }
 
-function addThink(msg){ const el=document.createElement("div"); el.className="think-indicator"; el.textContent=msg; document.getElementById("messages").appendChild(el); return el; }
+function addThink(msg){ const el=document.createElement("div"); el.className="thinking"; el.innerHTML=`<div class="dots"><span></span><span></span><span></span></div> ${esc(msg)}`; document.getElementById("msgs").appendChild(el); scrollBot(); return el; }
 function addErr(container,msg){ const s=document.createElement("span"); s.style.color="var(--red)"; s.textContent="⚠ "+msg; container.appendChild(s); }
 function addToolCall(container,d){
   const el=document.createElement("div"); el.className="tool-call";
@@ -1237,59 +1261,16 @@ function addAgentMsg(own){
   const toolsEl=document.createElement("div"); toolsEl.className="tool-calls";
   msgEl.appendChild(toolsEl); msgEl.appendChild(bodyEl);
   wrap.appendChild(msgEl);
-  document.getElementById("messages").appendChild(wrap);
+  document.getElementById("msgs").appendChild(wrap);
+  scrollBot();
   return {msgEl,bodyEl,toolsEl};
 }
 
-/* ── ONBOARDING ── */
-async function checkOnboarding(){
-  try{
-    const r=await fetch("/api/onboarding"); const d=await r.json();
-    if(!d.completed){ showOnboarding(d.questions||[]); }
-  }catch(e){}
-}
-function showOnboarding(qs){
-  const ob=document.getElementById("onboarding-overlay");
-  if(!ob) return;
-  ob.style.display="flex";
-  const form=document.getElementById("ob-form");
-  form.innerHTML="";
-  qs.forEach((q,i)=>{
-    const div=document.createElement("div"); div.style.marginBottom="14px";
-    const lbl=document.createElement("label"); lbl.textContent=q; lbl.style.cssText="display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;";
-    const inp=document.createElement("textarea"); inp.rows=2; inp.name="q"+i;
-    inp.style.cssText="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px;color:var(--text);font-size:.8rem;resize:vertical;outline:none;";
-    div.appendChild(lbl); div.appendChild(inp); form.appendChild(div);
-  });
-}
-async function submitOnboarding(){
-  const form=document.getElementById("ob-form");
-  const answers={};
-  form.querySelectorAll("textarea").forEach((inp,i)=>{ answers["q"+i]=inp.value; });
-  await fetch("/api/onboarding/complete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({answers})});
-  document.getElementById("onboarding-overlay").style.display="none";
-}
-
-/* ── PROJECTS ── */
-async function loadProjects(){
-  try{
-    const r=await fetch("/api/projects"); const d=await r.json();
-    const list=document.getElementById("project-list");
-    if(!list) return;
-    list.innerHTML="";
-    (d.projects||[]).forEach(p=>{
-      const el=document.createElement("div"); el.className="project-item";
-      el.textContent=p.name; el.onclick=()=>selectProject(p);
-      list.appendChild(el);
-    });
-  }catch(e){}
-}
-function selectProject(p){
-  window._activeProject=p.name;
-  activeProj=p;
-  document.querySelectorAll(".project-item").forEach(el=>el.classList.toggle("active",el.textContent===p.name));
-  if(p.path) refreshTree();
-}
+/* (Removed dead duplicate onboarding + project functions — the working flow lives in
+   the #onboarding wizard, initSplash/initApp, selectProj and loadProjects above.) */
+// Keep IDE file tree pointed at the active project when one is selected.
+const _origSelectProj = selectProj;
+selectProj = async function(p){ window._activeProject = p.name; await _origSelectProj(p); };
 
 /* ── VOICE ── */
 let recognition=null;
@@ -1306,13 +1287,57 @@ function toggleVoice(){
 
 /* ── INIT ── */
 window.addEventListener("DOMContentLoaded",()=>{
-  initWS();
-  loadModels();
-  loadProjects();
-  checkOnboarding();
-  // restore PP key
+  initSplash();
   try{ const k=localStorage.getItem("gruda_pp_key"); if(k) _ppKey=k; }catch(e){}
 });
+
+/* ══════════════════════════════════════════════════════════
+   CORE UI HELPERS (define once; used across chat/render)
+══════════════════════════════════════════════════════════ */
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function fmtDate(d){ try{ return new Date(d).toLocaleString(); }catch(e){ return ""; } }
+function scrollBot(){ const a=document.getElementById("chat-area"); if(a) a.scrollTop=a.scrollHeight; }
+function mdToHtml(t){
+  let h=esc(t);
+  h=h.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${c.replace(/^[a-z0-9]+\n/i,"")}</code></pre>`);
+  h=h.replace(/`([^`]+)`/g,"<code>$1</code>");
+  h=h.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");
+  h=h.replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h2>$1</h2>");
+  h=h.replace(/\n/g,"<br>");
+  return h;
+}
+function appendMsg(role, content){
+  const wrap=document.createElement("div"); wrap.className="msg-wrap"+(role==="user"?" own":"");
+  const msg=document.createElement("div"); msg.className="msg "+(role==="user"?"user-msg":"agent-msg");
+  const head=document.createElement("div"); head.className="msg-head";
+  const who = role==="user" ? (displayName||"You") : (window.aiName||"GRUDA");
+  head.innerHTML=`<div class="avatar ${role==="user"?"user":"agent"}">${role==="user"?esc(who.slice(0,1).toUpperCase()):"⚔"}</div><div class="msg-name">${esc(who)}</div>`;
+  const body=document.createElement("div"); body.className="msg-body";
+  if(role==="user") body.textContent=content; else body.innerHTML=mdToHtml(content);
+  msg.appendChild(head); msg.appendChild(body); wrap.appendChild(msg);
+  document.getElementById("msgs").appendChild(wrap); scrollBot();
+}
+function setSend(on){ const b=document.getElementById("send-btn"); if(b){ b.disabled=on; b.textContent=on?"…":"Send ↵"; } }
+
+/* ── Voice output: ElevenLabs first, browser SpeechSynthesis fallback ── */
+async function speak(text){
+  if(!text) return;
+  try{
+    const r=await fetch("/api/tts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text, voiceId: window.voiceId||""})});
+    if(r.ok){ const buf=await r.arrayBuffer(); const a=new Audio(URL.createObjectURL(new Blob([buf],{type:"audio/mpeg"}))); a.play(); return; }
+  }catch(e){}
+  try{ const u=new SpeechSynthesisUtterance(text); speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){}
+}
+
+/* ── Puter free cloud models (key-free, user-pays) ── */
+function isPuterModel(v){ return typeof v==="string" && v.indexOf("puter:")===0; }
+async function puterChatStream(msgs, model, bodyEl){
+  if(typeof puter==="undefined" || !puter.ai){ bodyEl.textContent="Puter SDK not loaded"; return ""; }
+  let full="";
+  const resp=await puter.ai.chat(msgs,{ model: model.slice(6), stream:true });
+  for await (const part of resp){ const t=(part&&part.text)||""; if(t){ full+=t; bodyEl.innerHTML=mdToHtml(full); scrollBot(); } }
+  return full;
+}
 </script>
 </body>
 </html>

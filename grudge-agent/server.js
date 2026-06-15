@@ -23,6 +23,7 @@ const { execSync } = require("child_process");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const express   = require("express");
 const WebSocket = require("ws");
+const multer    = require("multer");
 
 /* ── Config ──────────────────────────────────────────────────── */
 const PORT           = parseInt(process.env.PORT || "3200", 10);
@@ -35,8 +36,18 @@ const SPLASH_GIF_2   = process.env.SPLASH_GIF_2  || "";
 const MASTER_NODE    = process.env.MASTER_NODE_URL || "";
 const TREATY_URL     = process.env.TREATY_CHAT_URL || MASTER_NODE || "https://master.grudge-studio.com";
 
-/* ── Data dirs ───────────────────────────────────────────────── */
-const DATA_DIR     = path.join(os.homedir(), ".gruda-agent");
+/* ── Music (Mureka) ──────────────────────────────────────────── */
+const MUREKA_KEY     = process.env.MUREKA_API_KEY || "";
+const MUREKA_MODEL   = process.env.MUREKA_MODEL   || "auto";
+const MUREKA_BASE    = process.env.MUREKA_BASE    || "https://api.mureka.ai";
+
+/* ── Voice (ElevenLabs) ──────────────────────────────────────── */
+const ELEVEN_KEY     = process.env.ELEVENLABS_API_KEY || "";
+const ELEVEN_VOICE   = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Rachel (default)
+const ELEVEN_BASE    = "https://api.elevenlabs.io";
+
+/* ── Data dirs ────────────────────────────────────── */
+const DATA_DIR     = process.env.DATA_DIR || path.join(os.homedir(), ".gruda-agent");
 const CONFIG_FILE  = path.join(DATA_DIR, "config.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -49,6 +60,7 @@ function loadConfig() {
 }
 function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf8");
+  pgUpsertConfig(cfg);            // best-effort durable mirror (Postgres)
 }
 
 /* ── History helpers ─────────────────────────────────────────── */
@@ -60,6 +72,34 @@ function appendSession(s) {
   const h = loadHistory();
   h.push({ ...s, savedAt: new Date().toISOString() });
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(h.slice(-50), null, 2), "utf8");
+  if (pgReady) pgPool.query(
+    "INSERT INTO gruda_sessions (title, project, summary, messages) VALUES ($1,$2,$3,$4)",
+    [s.title||null, s.project||null, s.summary||null, JSON.stringify(s.messages||[])]
+  ).catch(()=>{});
+}
+
+/* ── Persona / system prompt builder ───────────────────────────── */
+// Weaves the user's chosen AI name, generated persona, custom talk commands,
+// and project memory into one system prompt. Used by both agent and chat.
+function buildPersona(cfg, memory, systemExtra) {
+  const aiName = (cfg && cfg.aiName) || "GRUDA Agent";
+  const cmds  = (cfg && Array.isArray(cfg.talkCommands)) ? cfg.talkCommands.filter(c => c && c.phrase) : [];
+  const rules = (cfg && Array.isArray(cfg.rules)) ? cfg.rules.filter(Boolean) : [];
+  return (
+    `You are ${aiName}, a personal agentic AI built on GRUDA Agent by Grudge Studio (RacAlvin The Pirate King). ` +
+    `You help the computer's owner get real work done — like Warp's agent, but theirs.\n` +
+    `You may run locally via Ollama or in the cloud via Puter. Tools available: search/read/write files, create folders, run shell commands (npm/node/git), unzip archives, convert files, search the web, open URLs, generate music (Mureka) and images, and update gruda.md memory.\n\n` +
+    `Operating principles:\n` +
+    `- If a request is ambiguous or could be done multiple meaningfully different ways, ASK ONE concise clarifying question before acting — don't guess on irreversible or large actions.\n` +
+    `- Prefer doing over describing: when asked to build/create/deploy, use your tools and do it.\n` +
+    `- Save important context to gruda.md — it is your long-term memory.\n\n` +
+    ((cfg && cfg.systemPrompt) ? `## Who you're helping\n${cfg.systemPrompt}\n\n` : "") +
+    (rules.length ? `## User rules (always follow)\n` + rules.map(r => `- ${r}`).join("\n") + `\n\n` : "") +
+    (cmds.length ? `## Custom talk / vocal commands the user may type or say\n` + cmds.map(c => `- "${c.phrase}" → ${c.action || c.prompt || "custom action"}`).join("\n") + `\n\n` : "") +
+    (memory ? `## Project Memory (gruda.md)\n${memory}\n\n` : "No project memory yet.\n\n") +
+    (systemExtra || "") +
+    `Be direct and helpful.`
+  );
 }
 
 /* ── Express + WS ────────────────────────────────────────────── */
@@ -69,6 +109,11 @@ const wss    = new WebSocket.Server({ server });
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+/* ── Uploads (multipart) ─────────────────────────────────────── */
+const UPLOAD_TMP = path.join(os.tmpdir(), "gruda-uploads");
+fs.mkdirSync(UPLOAD_TMP, { recursive: true });
+const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 100 * 1024 * 1024 } });
 
 function broadcast(data) {
   const m = JSON.stringify(data);
@@ -131,8 +176,20 @@ const TOOLS = [
     parameters:{ type:"object", properties:{ query:{ type:"string" } }, required:["query"] }
   }},
   { type:"function", function:{ name:"run_command",
-    description:"Run a shell command and return output",
+    description:"Run a shell command and return output (npm, node, git, etc. — allow-listed)",
     parameters:{ type:"object", properties:{ command:{ type:"string" }, cwd:{ type:"string" } }, required:["command"] }
+  }},
+  { type:"function", function:{ name:"unzip",
+    description:"Extract a .zip archive to a destination folder",
+    parameters:{ type:"object", properties:{ path:{ type:"string" }, dest:{ type:"string" } }, required:["path"] }
+  }},
+  { type:"function", function:{ name:"convert_file",
+    description:"Convert a file: json<->csv, any->base64, base64->text, or read as text",
+    parameters:{ type:"object", properties:{ path:{ type:"string" }, to:{ type:"string", enum:["csv","json","base64","text"] }, out:{ type:"string" } }, required:["path","to"] }
+  }},
+  { type:"function", function:{ name:"open_url",
+    description:"Fetch and read the text content of a web page (lightweight browsing)",
+    parameters:{ type:"object", properties:{ url:{ type:"string" } }, required:["url"] }
   }}
 ];
 
@@ -214,6 +271,43 @@ async function executeTool(name, args, projectDir) {
         const out = execSync(args.command, { cwd, timeout:30000, encoding:"utf8", stdio:"pipe" });
         return { ok:true, output: out.slice(0,8000) };
       }
+      case "unzip": {
+        const AdmZip = require("adm-zip");
+        if (!fs.existsSync(args.path)) return { error: `Not found: ${args.path}` };
+        const dest = args.dest || path.join(path.dirname(args.path), path.basename(args.path, path.extname(args.path)));
+        fs.mkdirSync(dest, { recursive: true });
+        new AdmZip(args.path).extractAllTo(dest, true);
+        return { ok:true, dest, files: fs.readdirSync(dest).slice(0, 200) };
+      }
+      case "convert_file": {
+        if (!fs.existsSync(args.path)) return { error: `Not found: ${args.path}` };
+        const raw = fs.readFileSync(args.path);
+        const ext = path.extname(args.path).toLowerCase();
+        const outPath = args.out || (args.path + "." + args.to);
+        let outData;
+        if (args.to === "base64")      outData = raw.toString("base64");
+        else if (args.to === "text")   outData = raw.toString("utf8");
+        else if (args.to === "json" && ext === ".csv") {
+          const [head, ...rows] = raw.toString("utf8").split(/\r?\n/).filter(Boolean);
+          const cols = head.split(",");
+          outData = JSON.stringify(rows.map(r => { const v = r.split(","); return Object.fromEntries(cols.map((c,i)=>[c, v[i]])); }), null, 2);
+        }
+        else if (args.to === "csv" && ext === ".json") {
+          const arr = JSON.parse(raw.toString("utf8"));
+          const cols = Object.keys(arr[0] || {});
+          outData = [cols.join(","), ...arr.map(o => cols.map(c => o[c]).join(","))].join("\n");
+        }
+        else outData = raw.toString("utf8");
+        fs.writeFileSync(outPath, outData, "utf8");
+        return { ok:true, out: outPath, bytes: Buffer.byteLength(outData) };
+      }
+      case "open_url": {
+        const r = await fetch(args.url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "gruda-agent" } });
+        const text = (await r.text())
+          .replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        return { ok:r.ok, status:r.status, url:args.url, text: text.slice(0, 6000) };
+      }
       default: return { error: `Unknown tool: ${name}` };
     }
   } catch(err) { return { error: err.message }; }
@@ -233,15 +327,7 @@ app.post("/api/agent/stream", async (req, res) => {
   const memory  = fs.existsSync(memPath) ? fs.readFileSync(memPath, "utf8") : "";
   const cfg     = loadConfig();
 
-  const system =
-    `You are GRUDA Agent, a local AI assistant built by Grudge Studio (RacAlvin The Pirate King). ` +
-    `You run entirely on the user's machine — no cloud, no API keys.\n\n` +
-    `You have tools: search files, read/write files, create folders, run shell commands, search the web, update gruda.md memory.\n\n` +
-    `Always save important context to gruda.md. This is your long-term memory.\n\n` +
-    (cfg.systemPrompt ? `## User Context\n${cfg.systemPrompt}\n\n` : "") +
-    (memory ? `## Project Memory (gruda.md)\n${memory}\n\n` : "No project memory yet.\n\n") +
-    (systemExtra || "") +
-    `Be direct. When asked to build or create something — do it, don't describe it.`;
+  const system = buildPersona(cfg, memory, systemExtra);
 
   let loopMsgs = [{ role:"system", content:system }, ...messages];
   const toolLog = [];
@@ -292,7 +378,7 @@ app.post("/api/chat/stream", async (req, res) => {
   res.setHeader("Cache-Control","no-cache");
   res.setHeader("Connection","keep-alive");
   const cfg = loadConfig();
-  const sysContent = system || cfg.systemPrompt || "";
+  const sysContent = system || buildPersona(cfg, "", "");
   const allMsgs = sysContent ? [{ role:"system", content:sysContent }, ...messages] : messages;
   let r;
   try {
@@ -321,42 +407,65 @@ app.get("/api/onboarding", (_req, res) => {
 });
 
 app.post("/api/onboarding/complete", async (req, res) => {
-  const { answers, model } = req.body;
-  /* Ask local AI to generate a personalized system prompt from the answers */
-  let systemPrompt = "";
+  const { userName, aiName, voiceId, talkCommands, qa, answers, model } = req.body;
+  // Accept either a structured qa[] (new 30-question wizard) or a flat answers{} (legacy)
+  const items = Array.isArray(qa)
+    ? qa.filter(x => x && x.answer != null && String(x.answer).trim())
+    : (answers ? Object.entries(answers).map(([k, v]) => ({ category:"Profile", question:k, answer:v })) : []);
+  const name = (userName || (answers && answers.name) || "Friend").toString().trim() || "Friend";
+  const aiN  = (aiName || "GRUDA").toString().trim() || "GRUDA";
+  const cmds = Array.isArray(talkCommands) ? talkCommands.filter(c => c && c.phrase) : [];
+
+  // Compact profile summary — doubles as the fallback persona when no model is reachable
+  const summary = items.map(i => `${String(i.question).replace(/\?$/,"")}: ${i.answer}`).join("; ").slice(0, 1200);
+  let systemPrompt =
+    `You are ${aiN}, the personal AI for ${name}. Address them by name when natural and adapt to their context. ` +
+    `Profile — ${summary || "no details provided yet"}.`;
+
+  // Optionally upgrade the persona with the local model (ignored if Ollama is unavailable — e.g. on Railway)
   try {
-    const prompt =
-      `Based on this user profile, write a concise AI assistant system prompt (3-5 sentences) that personalizes the assistant for them. Be specific. Return only the system prompt text, nothing else.\n\nUser profile:\n${JSON.stringify(answers, null, 2)}`;
+    const prompt = `Write a concise (3-5 sentence) system prompt for an AI assistant named "${aiN}" helping a user named "${name}". Personalize using this profile and return ONLY the prompt text.\n\n${summary}`;
     const r = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ model: model || DEFAULT_MODEL, prompt, stream:false }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(20000),
     });
-    if (r.ok) { const d = await r.json(); systemPrompt = d.response?.trim() || ""; }
+    if (r.ok) { const d = await r.json(); if (d.response?.trim()) systemPrompt = d.response.trim(); }
   } catch {}
 
   const cfg = loadConfig();
   cfg.onboarded    = true;
   cfg.onboardedAt  = new Date().toISOString();
-  cfg.answers      = answers;
+  cfg.userName     = name;
+  cfg.displayName  = name;
+  cfg.aiName       = aiN;
+  cfg.voiceId      = voiceId || "";
+  cfg.talkCommands = cmds;
+  cfg.answers      = items;
   cfg.systemPrompt = systemPrompt;
-  cfg.displayName  = answers.name || "Agent";
   saveConfig(cfg);
 
-  /* Create a default project with the answers saved in gruda.md */
-  const projName = (answers.name || "My").replace(/\s+/g, "-") + "-workspace";
+  // Build a rich gruda.md grouped by category
+  const byCat = {};
+  for (const i of items) { const c = i.category || "Profile"; (byCat[c] = byCat[c] || []).push(i); }
+  let mem = `# ${name}'s Workspace\n\nYour AI: **${aiN}**\nCreated: ${new Date().toISOString()}\n`;
+  for (const [cat, list] of Object.entries(byCat)) {
+    mem += `\n## ${cat}\n` + list.map(i => `- **${String(i.question).replace(/\*/g,"")}** ${i.answer}`).join("\n") + "\n";
+  }
+  if (cmds.length) {
+    mem += `\n## Custom Talk Commands\n` + cmds.map(c => `- "${c.phrase}" → ${c.action || c.prompt || ""}`).join("\n") + "\n";
+  }
+  mem += `\n## Generated Persona\n${systemPrompt}\n`;
+
+  const projName = (name.replace(/[^a-z0-9_\- ]/gi,"").replace(/\s+/g, "-") || "My") + "-workspace";
   const projPath = path.join(PROJECTS_DIR, projName);
   fs.mkdirSync(projPath, { recursive: true });
-  const memContent =
-    `# ${answers.name || "My"} Workspace\n\nCreated: ${new Date().toISOString()}\n\n` +
-    `## About Me\n${answers.role || ""}\n\n` +
-    `## Goals\n${answers.goals || ""}\n\n` +
-    `## Projects I Work On\n${answers.projects || ""}\n\n` +
-    `## AI Preferences\n${answers.preferences || ""}\n\n` +
-    (systemPrompt ? `## Generated System Prompt\n${systemPrompt}\n` : "");
-  fs.writeFileSync(path.join(projPath, "gruda.md"), memContent, "utf8");
+  fs.writeFileSync(path.join(projPath, "gruda.md"), mem, "utf8");
+  pgUpsertProject(projName);
+  pgUpsertMemory(projName, mem);
+  pgUpsertOnboarding(cfg);
 
-  res.json({ ok:true, systemPrompt, defaultProject:{ name:projName, path:projPath } });
+  res.json({ ok:true, aiName:aiN, systemPrompt, defaultProject:{ name:projName, path:projPath } });
 });
 
 /* ── Models ──────────────────────────────────────────────────── */
@@ -393,8 +502,11 @@ app.post("/api/projects", (req, res) => {
   if (!name) return res.status(400).json({ error:"name required" });
   const p = path.join(PROJECTS_DIR, name.replace(/[^a-z0-9_\-. ]/gi,"_"));
   fs.mkdirSync(p, { recursive:true });
+  const safeName = path.basename(p);
   const mem = path.join(p,"gruda.md");
   if (!fs.existsSync(mem)) fs.writeFileSync(mem, `# ${name}\n\nCreated: ${new Date().toISOString()}\n\n## Notes\n\n`,"utf8");
+  pgUpsertProject(safeName);
+  pgUpsertMemory(safeName, fs.readFileSync(mem, "utf8"));
   res.json({ ok:true, name, path:p });
 });
 
@@ -403,8 +515,28 @@ app.get("/api/projects/:name/memory", (req, res) => {
   res.json({ content: fs.existsSync(m) ? fs.readFileSync(m,"utf8") : "" });
 });
 
+// Save / edit a project's gruda.md from the UI (also mirrored to Postgres)
+app.post("/api/projects/:name/memory", (req, res) => {
+  const safe = req.params.name.replace(/[^a-z0-9_\-. ]/gi, "_");
+  const dir  = path.join(PROJECTS_DIR, safe);
+  fs.mkdirSync(dir, { recursive: true });
+  const content = req.body.content || "";
+  fs.writeFileSync(path.join(dir, "gruda.md"), content, "utf8");
+  pgUpsertProject(safe);
+  pgUpsertMemory(safe, content);
+  res.json({ ok:true });
+});
+
 /* ── History ─────────────────────────────────────────────────── */
-app.get("/api/history", (_req,  res) => res.json({ sessions: loadHistory().slice(-20).reverse() }));
+app.get("/api/history", async (_req, res) => {
+  if (pgReady) {
+    try {
+      const r = await pgPool.query('SELECT title, project, summary, messages, saved_at AS "savedAt" FROM gruda_sessions ORDER BY saved_at DESC LIMIT 20');
+      return res.json({ sessions: r.rows });
+    } catch {}
+  }
+  res.json({ sessions: loadHistory().slice(-20).reverse() });
+});
 app.post("/api/history", (req, res) => { appendSession(req.body); res.json({ ok:true }); });
 
 /* ── Config ──────────────────────────────────────────────────── */
@@ -446,7 +578,7 @@ app.get("/api/health", async (_req, res) => {
   let ollama = false;
   try { const r = await fetch(`${OLLAMA_HOST}/api/tags`); ollama = r.ok; } catch {}
   const treaty = !!(treatyWs && treatyWs.readyState === WebSocket.OPEN);
-  res.json({ ok:true, ollama, treaty });
+  res.json({ ok:true, ollama, treaty, db: pgReady, music: !!MUREKA_KEY, voice: !!ELEVEN_KEY });
 });
 
 
@@ -604,15 +736,288 @@ app.get("/api/assets/grudge", async (_req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════
-   POSTGRES (optional) — falls back to JSON files when no DATABASE_URL
+   MUSIC — Mureka (song · instrumental · lyrics) — async + polling
+   ═══════════════════════════════════════════════════════════════ */
+function murekaHeaders() { return { Authorization: `Bearer ${MUREKA_KEY}`, "Content-Type": "application/json" }; }
+const MUSIC_OFF = { error: "Music not configured. Set MUREKA_API_KEY in your environment.", configured: false };
+
+app.post("/api/music/song", async (req, res) => {
+  if (!MUREKA_KEY) return res.status(501).json(MUSIC_OFF);
+  const { lyrics, prompt, model } = req.body;
+  if (!lyrics) return res.status(400).json({ error: "lyrics required" });
+  try {
+    const r = await fetch(`${MUREKA_BASE}/v1/song/generate`, {
+      method: "POST", headers: murekaHeaders(),
+      body: JSON.stringify({ lyrics, prompt: prompt || "", model: model || MUREKA_MODEL }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const d = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: d.error?.message || "Mureka error", detail: d });
+    pgSaveMusic({ kind:"song", taskId: d.id, prompt, lyrics, model: d.model, status: d.status });
+    res.json({ ok:true, kind:"song", id: d.id, status: d.status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/music/instrumental", async (req, res) => {
+  if (!MUREKA_KEY) return res.status(501).json(MUSIC_OFF);
+  const { prompt, model } = req.body;
+  if (!prompt) return res.status(400).json({ error: "prompt required" });
+  try {
+    const r = await fetch(`${MUREKA_BASE}/v1/instrumental/generate`, {
+      method: "POST", headers: murekaHeaders(),
+      body: JSON.stringify({ prompt, model: model || MUREKA_MODEL }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const d = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: d.error?.message || "Mureka error", detail: d });
+    pgSaveMusic({ kind:"instrumental", taskId: d.id, prompt, model: d.model, status: d.status });
+    res.json({ ok:true, kind:"instrumental", id: d.id, status: d.status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/music/lyrics", async (req, res) => {
+  if (!MUREKA_KEY) return res.status(501).json(MUSIC_OFF);
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: "prompt required" });
+  try {
+    const r = await fetch(`${MUREKA_BASE}/v1/lyrics/generate`, {
+      method: "POST", headers: murekaHeaders(),
+      body: JSON.stringify({ prompt }), signal: AbortSignal.timeout(30000),
+    });
+    const d = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: d.error?.message || "Mureka error", detail: d });
+    res.json({ ok:true, title: d.title || "", lyrics: d.lyrics || d.response || "" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Poll a generation task. kind = song | instrumental
+app.get("/api/music/task/:kind/:id", async (req, res) => {
+  if (!MUREKA_KEY) return res.status(501).json(MUSIC_OFF);
+  const kind = req.params.kind === "instrumental" ? "instrumental" : "song";
+  try {
+    const r = await fetch(`${MUREKA_BASE}/v1/${kind}/query/${encodeURIComponent(req.params.id)}`, {
+      headers: murekaHeaders(), signal: AbortSignal.timeout(20000),
+    });
+    const d = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: d.error?.message || "Mureka error", detail: d });
+    const data = d.data || d;   // official API returns flat; some gateways wrap in {data}
+    res.json({ ok:true, status: data.status, choices: data.choices || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   VOICE — ElevenLabs TTS (frontend falls back to browser speech)
+   ═══════════════════════════════════════════════════════════════ */
+app.get("/api/tts/voices", async (_req, res) => {
+  if (!ELEVEN_KEY) return res.json({ enabled:false, voices: [] });
+  try {
+    const r = await fetch(`${ELEVEN_BASE}/v1/voices`, { headers: { "xi-api-key": ELEVEN_KEY }, signal: AbortSignal.timeout(15000) });
+    const d = await r.json();
+    res.json({ enabled:true, defaultVoice: ELEVEN_VOICE, voices: (d.voices||[]).map(v => ({ id: v.voice_id, name: v.name, category: v.category })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/tts", async (req, res) => {
+  if (!ELEVEN_KEY) return res.status(501).json({ error: "ElevenLabs not configured", configured: false });
+  const { text, voiceId } = req.body;
+  if (!text) return res.status(400).json({ error: "text required" });
+  const vid = (voiceId || ELEVEN_VOICE).toString().trim();
+  try {
+    const r = await fetch(`${ELEVEN_BASE}/v1/text-to-speech/${encodeURIComponent(vid)}`, {
+      method: "POST",
+      headers: { "xi-api-key": ELEVEN_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
+      body: JSON.stringify({ text: String(text).slice(0, 5000), model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!r.ok) { let msg; try { msg = (await r.json()).detail?.message; } catch {} return res.status(r.status).json({ error: msg || `ElevenLabs ${r.status}` }); }
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   AGENT UTILITIES — uploads · cache clear · GrudaChain proxy
+   ═══════════════════════════════════════════════════════════════ */
+// Upload files into a project's uploads/ folder so the agent can read/unzip/convert them
+app.post("/api/upload", upload.array("files", 20), (req, res) => {
+  const proj = (req.body.project || "").replace(/[^a-z0-9_\-. ]/gi, "_");
+  const destDir = path.join(PROJECTS_DIR, proj || "_uploads", "uploads");
+  fs.mkdirSync(destDir, { recursive: true });
+  const saved = [];
+  for (const f of (req.files || [])) {
+    const target = path.join(destDir, (f.originalname || "file").replace(/[^a-z0-9_\-. ]/gi, "_"));
+    try { fs.renameSync(f.path, target); } catch { fs.copyFileSync(f.path, target); fs.unlinkSync(f.path); }
+    saved.push({ name: f.originalname, path: target, size: f.size });
+  }
+  res.json({ ok:true, files: saved, dir: destDir });
+});
+
+// Clear temp/run/upload caches (resource hygiene)
+app.post("/api/cache/clear", (_req, res) => {
+  const tmp = os.tmpdir();
+  let removed = 0;
+  try {
+    for (const n of fs.readdirSync(tmp)) {
+      if (/^gruda_run_/.test(n) || n === "gruda-uploads") {
+        try { fs.rmSync(path.join(tmp, n), { recursive:true, force:true }); removed++; } catch {}
+      }
+    }
+  } catch {}
+  try { fs.mkdirSync(UPLOAD_TMP, { recursive: true }); } catch {}
+  res.json({ ok:true, removed });
+});
+
+// GrudaChain / master node passthrough (set MASTER_NODE_URL to enable)
+app.all(/^\/api\/grudachain\/(.*)/, async (req, res) => {
+  if (!MASTER_NODE) return res.status(501).json({ error: "GrudaChain not configured (set MASTER_NODE_URL)" });
+  const sub = req.params[0] || "";
+  try {
+    const r = await fetch(`${MASTER_NODE.replace(/\/$/, "")}/${sub}`, {
+      method: req.method,
+      headers: { "Content-Type": "application/json" },
+      body: ["GET","HEAD"].includes(req.method) ? undefined : JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(15000),
+    });
+    const txt = await r.text();
+    res.status(r.status).type(r.headers.get("content-type") || "application/json").send(txt);
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   AI WORKER ORCHESTRATOR — communal truth + checks (debuggable)
+   A team of focused workers share ONE truth store per project. The
+   orchestrator plans → dispatches workers → runs a QA/checks pass.
+   Every step is appended to orchestrator.log.jsonl for inspection.
+   ═══════════════════════════════════════════════════════════════ */
+const WORKERS = {
+  code:     { name:"Code Worker",     scope:"Writes/edits code, configs, scripts; uses files + shell.",
+             system:"You are the Code Worker. Produce correct, minimal, working code and clear file/CLI steps. Note risky actions." },
+  art3d:    { name:"3D / Art Worker", scope:"three.js scenes, models, materials, game boards, visuals.",
+             system:"You are the 3D/Art Worker. Design three.js scene graphs, materials, layouts and game boards as concrete JSON/specs." },
+  lore:     { name:"Lore Worker",     scope:"Story, world, NPCs, D&D character writing.",
+             system:"You are the Lore Worker. Write vivid, consistent lore, NPCs and D&D characters that respect established truth." },
+  balance:  { name:"Balance Worker",  scope:"Game balance: stats, economy, difficulty curves.",
+             system:"You are the Balance Worker. Tune stats/economy/difficulty with concrete numbers and rationale." },
+  campaign: { name:"Campaign Worker", scope:"D&D campaigns: acts, encounters, maps, quests.",
+             system:"You are the Campaign Worker. Design campaign acts, encounters, maps and quest chains with clear structure." },
+  qa:       { name:"QA / Checks",     scope:"Validates outputs against the shared truth; flags conflicts.",
+             system:"You are the QA/Checks Worker. Rigorously compare artifacts to the goal and truth; list conflicts, gaps and contradictions plainly." },
+};
+
+function truthPaths(project) {
+  const safe = (project || "_default").replace(/[^a-z0-9_\-. ]/gi, "_");
+  const base = path.join(PROJECTS_DIR, safe, ".gruda");
+  return { base, truth: path.join(base, "truth.json"), log: path.join(base, "orchestrator.log.jsonl") };
+}
+function readTruth(project) {
+  try { return JSON.parse(fs.readFileSync(truthPaths(project).truth, "utf8")); }
+  catch { return { facts: [], artifacts: [], decisions: [], openQuestions: [], updatedAt: null }; }
+}
+function writeTruth(project, t) {
+  const { base, truth } = truthPaths(project);
+  fs.mkdirSync(base, { recursive: true });
+  t.updatedAt = new Date().toISOString();
+  fs.writeFileSync(truth, JSON.stringify(t, null, 2), "utf8");
+  return t;
+}
+function logStep(project, entry) {
+  const { base, log } = truthPaths(project);
+  try { fs.mkdirSync(base, { recursive: true }); fs.appendFileSync(log, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n", "utf8"); } catch {}
+}
+// Single non-streaming completion via Ollama (used by orchestrator workers)
+async function llmComplete(model, system, user, ms = 60000) {
+  const r = await fetch(`${OLLAMA_HOST}/api/chat`, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ model, stream:false, messages:[{role:"system",content:system},{role:"user",content:user}] }),
+    signal: AbortSignal.timeout(ms),
+  });
+  if (!r.ok) throw new Error(`model ${r.status}`);
+  return (await r.json()).message?.content || "";
+}
+
+app.get("/api/workers", (_req, res) => {
+  res.json({ workers: Object.entries(WORKERS).map(([id, w]) => ({ id, name: w.name, scope: w.scope })) });
+});
+
+app.get("/api/truth", (req, res) => {
+  const project = req.query.project || "_default";
+  let recent = [];
+  try { recent = fs.readFileSync(truthPaths(project).log, "utf8").trim().split("\n").filter(Boolean).slice(-50).map(l => JSON.parse(l)); } catch {}
+  res.json({ project, truth: readTruth(project), log: recent });
+});
+app.post("/api/truth", (req, res) => {
+  if (!req.body.truth) return res.status(400).json({ error: "truth required" });
+  res.json({ ok:true, truth: writeTruth(req.body.project, req.body.truth) });
+});
+
+// Orchestrate a goal across the worker team (SSE; every step streamed for debugging)
+app.post("/api/orchestrate", async (req, res) => {
+  const { goal, project, model } = req.body;
+  res.setHeader("Content-Type","text/event-stream"); res.setHeader("Cache-Control","no-cache"); res.setHeader("Connection","keep-alive");
+  const emit = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+  if (!goal) { emit({ type:"error", message:"goal required" }); return res.end(); }
+  const m = model || DEFAULT_MODEL;
+  const proj = project || "_default";
+  logStep(proj, { type:"run_start", goal });
+  emit({ type:"truth", truth: readTruth(proj) });
+
+  // 1) Plan
+  let tasks = [];
+  try {
+    const planSys = `You are the Orchestrator AI. Decompose the goal into 2-5 ordered tasks, each assigned to ONE worker from: ${Object.keys(WORKERS).join(", ")}. Return ONLY JSON: {"tasks":[{"worker":"<id>","task":"<what to do>"}]}.`;
+    const raw = await llmComplete(m, planSys, `Goal: ${goal}\n\nCurrent truth:\n${JSON.stringify(readTruth(proj)).slice(0,2000)}`);
+    tasks = (JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]).tasks || []).filter(t => WORKERS[t.worker]).slice(0, 6);
+  } catch (e) {
+    emit({ type:"error", message:`Planning failed (is a model backend reachable? ${e.message}). Run Ollama or set OLLAMA_HOST.` });
+    logStep(proj, { type:"error", phase:"plan", message:e.message });
+    return res.end();
+  }
+  emit({ type:"plan", tasks }); logStep(proj, { type:"plan", tasks });
+
+  // 2) Dispatch workers — each reads + writes the communal truth
+  for (const t of tasks) {
+    const w = WORKERS[t.worker];
+    emit({ type:"worker_start", worker:t.worker, name:w.name, task:t.task });
+    logStep(proj, { type:"worker_start", worker:t.worker, task:t.task });
+    let out = "";
+    try {
+      const sys = `${w.system}\nYour scope: ${w.scope}\nYou share a communal truth with other workers. Do your task and return a concise result. Truth:\n${JSON.stringify(readTruth(proj)).slice(0,3000)}`;
+      out = await llmComplete(m, sys, t.task);
+    } catch (e) { out = `(worker error: ${e.message})`; }
+    const cur = readTruth(proj);
+    cur.artifacts.push({ worker:t.worker, task:t.task, result: out.slice(0,4000), at: new Date().toISOString() });
+    writeTruth(proj, cur);
+    emit({ type:"worker_done", worker:t.worker, result: out.slice(0,4000) });
+    logStep(proj, { type:"worker_done", worker:t.worker });
+  }
+
+  // 3) QA / checks pass — validate artifacts against goal + truth
+  let findings = "";
+  try {
+    findings = await llmComplete(m, `${WORKERS.qa.system}`, `Goal: ${goal}\n\nValidate these against the goal; list conflicts, gaps, contradictions.\n\nTruth:\n${JSON.stringify(readTruth(proj)).slice(0,4000)}`);
+  } catch (e) { findings = `(qa error: ${e.message})`; }
+  const finalT = readTruth(proj);
+  finalT.decisions.push({ type:"qa_check", findings: findings.slice(0,4000), at: new Date().toISOString() });
+  writeTruth(proj, finalT);
+  emit({ type:"check", findings }); logStep(proj, { type:"check" });
+
+  emit({ type:"done", truth: finalT }); logStep(proj, { type:"run_done" });
+  res.end();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   POSTGRES (optional) — durable store; falls back to JSON/files
+   when DATABASE_URL is not set. Write-through + boot hydrate.
    ═══════════════════════════════════════════════════════════════ */
 let pgPool = null;
+let pgReady = false;
 
-if (process.env.DATABASE_URL) {
+async function pgInit() {
+  if (!process.env.DATABASE_URL) return;
   try {
     const { Pool } = require("pg");
     pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-    pgPool.query(`
+    await pgPool.query(`
       CREATE TABLE IF NOT EXISTS gruda_sessions (
         id SERIAL PRIMARY KEY, title TEXT, project TEXT, summary TEXT,
         messages JSONB, saved_at TIMESTAMPTZ DEFAULT NOW()
@@ -620,21 +1025,91 @@ if (process.env.DATABASE_URL) {
       CREATE TABLE IF NOT EXISTS gruda_config (
         key TEXT PRIMARY KEY, value JSONB, updated_at TIMESTAMPTZ DEFAULT NOW()
       );
-    `).then(() => console.log("[gruda] Postgres connected")).catch(e => {
-      console.warn("[gruda] Postgres init failed:", e.message); pgPool = null;
-    });
-  } catch(e) { console.warn("[gruda] pg not installed:", e.message); }
+      CREATE TABLE IF NOT EXISTS gruda_projects (
+        name TEXT PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS gruda_memory (
+        project TEXT PRIMARY KEY, content TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS gruda_onboarding (
+        id INT PRIMARY KEY DEFAULT 1, user_name TEXT, ai_name TEXT, voice_id TEXT,
+        talk_commands JSONB, answers JSONB, system_prompt TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS gruda_music (
+        id SERIAL PRIMARY KEY, kind TEXT, task_id TEXT, prompt TEXT, lyrics TEXT,
+        model TEXT, status TEXT, result JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    pgReady = true;
+    console.log("[gruda] Postgres connected");
+    await pgHydrate();
+  } catch (e) { console.warn("[gruda] Postgres init failed:", e.message); pgPool = null; pgReady = false; }
 }
+
+// Restore config + project memory onto the local FS (for ephemeral hosts like Railway)
+async function pgHydrate() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) {
+      const c = await pgPool.query("SELECT value FROM gruda_config WHERE key='main'");
+      if (c.rows[0]?.value) fs.writeFileSync(CONFIG_FILE, JSON.stringify(c.rows[0].value, null, 2), "utf8");
+    }
+    const m = await pgPool.query("SELECT project, content FROM gruda_memory");
+    for (const row of m.rows) {
+      const pdir = path.join(PROJECTS_DIR, row.project);
+      fs.mkdirSync(pdir, { recursive: true });
+      const mp = path.join(pdir, "gruda.md");
+      if (!fs.existsSync(mp)) fs.writeFileSync(mp, row.content || "", "utf8");
+    }
+  } catch (e) { console.warn("[gruda] hydrate failed:", e.message); }
+}
+
+// Best-effort write-through helpers (no-op until Postgres is ready)
+function pgUpsertConfig(cfg) {
+  if (!pgReady) return;
+  pgPool.query(
+    "INSERT INTO gruda_config (key,value,updated_at) VALUES ('main',$1,NOW()) ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=NOW()",
+    [JSON.stringify(cfg)]
+  ).catch(()=>{});
+}
+function pgUpsertProject(name) {
+  if (!pgReady) return;
+  pgPool.query("INSERT INTO gruda_projects (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [name]).catch(()=>{});
+}
+function pgUpsertMemory(project, content) {
+  if (!pgReady) return;
+  pgPool.query(
+    "INSERT INTO gruda_memory (project,content,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (project) DO UPDATE SET content=$2, updated_at=NOW()",
+    [project, content]
+  ).catch(()=>{});
+}
+function pgUpsertOnboarding(cfg) {
+  if (!pgReady) return;
+  pgPool.query(
+    `INSERT INTO gruda_onboarding (id,user_name,ai_name,voice_id,talk_commands,answers,system_prompt,updated_at)
+     VALUES (1,$1,$2,$3,$4,$5,$6,NOW())
+     ON CONFLICT (id) DO UPDATE SET user_name=$1, ai_name=$2, voice_id=$3, talk_commands=$4, answers=$5, system_prompt=$6, updated_at=NOW()`,
+    [cfg.userName||null, cfg.aiName||null, cfg.voiceId||null, JSON.stringify(cfg.talkCommands||[]), JSON.stringify(cfg.answers||[]), cfg.systemPrompt||null]
+  ).catch(()=>{});
+}
+function pgSaveMusic(rec) {
+  if (!pgReady) return;
+  pgPool.query(
+    "INSERT INTO gruda_music (kind,task_id,prompt,lyrics,model,status,result) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [rec.kind||null, rec.taskId||null, rec.prompt||null, rec.lyrics||null, rec.model||null, rec.status||null, JSON.stringify(rec.result||null)]
+  ).catch(()=>{});
+}
+
+pgInit();
 
 /* DB-backed history endpoints (replaces JSON when pg available) */
 app.get("/api/history/pg", async (_req, res) => {
-  if (!pgPool) return res.json({ sessions: loadHistory().slice(-20).reverse(), source:"file" });
+  if (!pgReady) return res.json({ sessions: loadHistory().slice(-20).reverse(), source:"file" });
   const r = await pgPool.query("SELECT * FROM gruda_sessions ORDER BY saved_at DESC LIMIT 20");
   res.json({ sessions: r.rows, source:"postgres" });
 });
 
 app.post("/api/history/pg", async (req, res) => {
-  if (!pgPool) { appendSession(req.body); return res.json({ ok:true, source:"file" }); }
+  if (!pgReady) { appendSession(req.body); return res.json({ ok:true, source:"file" }); }
   const { title, project, summary, messages } = req.body;
   await pgPool.query(
     "INSERT INTO gruda_sessions (title, project, summary, messages) VALUES ($1,$2,$3,$4)",
@@ -911,7 +1386,14 @@ function broadcast(data) {
   wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
-/* ── Start ───────────────────────────────────────────────────── */
-server.listen(PORT, () => {
-  console.log(`[gruda-agent] Running at http://localhost:${PORT}`);
-});
+/* ── Start ─────────────────────────────────────────── */
+// On Vercel (and other serverless hosts) we export the Express app instead of
+// binding a port. Locally and via the `gruda-agent` CLI, VERCEL is unset so the
+// HTTP + WebSocket server starts normally.
+if (!process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log(`[gruda-agent] Running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

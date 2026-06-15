@@ -1,0 +1,19 @@
+# Keep build context lean and secrets OUT of the image
+node_modules
+npm-debug.log
+package-lock.json
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.dockerignore
+.gruda-agent
+gruda-projects
+electron
+dist
+*.log
+*.gif
+.DS_Store
+Thumbs.db
+.vercel

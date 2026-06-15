@@ -13,6 +13,11 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - TREATY_CHAT_URL=${TREATY_CHAT_URL:-https://master.grudge-studio.com}
       - BRAVE_SEARCH_KEY=${BRAVE_SEARCH_KEY:-}
+      # Optional integrations (leave blank to disable the feature)
+      - MUREKA_API_KEY=${MUREKA_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID:-}
+      - DATABASE_URL=${DATABASE_URL:-}
       - NODE_ENV=production
     volumes:
       - gruda-data:/data

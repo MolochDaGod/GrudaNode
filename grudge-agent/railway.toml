@@ -16,3 +16,13 @@ name = "gruda-agent"
 PORT = "3200"
 NODE_ENV = "production"
 TREATY_CHAT_URL = "https://master.grudge-studio.com"
+PROJECTS_DIR = "/projects"
+DATA_DIR = "/data"
+
+# Set these as Railway service variables (Dashboard → Variables) — do NOT commit secrets:
+#   MUREKA_API_KEY       = <your Mureka key>        (enables the Music tab)
+#   ELEVENLABS_API_KEY   = <your ElevenLabs key>    (enables ElevenLabs voice)
+#   ELEVENLABS_VOICE_ID  = <optional default voice>
+#   DATABASE_URL         = ${{Postgres.DATABASE_URL}}  (reference the Postgres plugin)
+# Attach a Railway Volume mounted at /projects (and /data) for durable local files;
+# otherwise persistence is handled by Postgres via DATABASE_URL.
