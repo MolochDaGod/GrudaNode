@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "name": "grudgedot",
+  "builds": [
+    { "src": "server.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "server.js" }
+  ],
+  "env": {
+    "GH_APP_ID": "3101811",
+    "GH_CLIENT_ID": "Iv23liLWxaTCRF5yqw1U",
+    "GH_ORG": "MolochDaGod"
+  }
+}
