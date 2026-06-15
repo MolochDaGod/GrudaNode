@@ -1381,12 +1381,7 @@ wss.on("connection", (ws) => {
   ws.on("error", ()=>{});
 });
 
-function broadcast(data) {
-  const msg = JSON.stringify(data);
-  wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
-}
-
-/* ── Start ─────────────────────────────────────────── */
+/* ── Start ────────────────────────────────── */
 // On Vercel (and other serverless hosts) we export the Express app instead of
 // binding a port. Locally and via the `gruda-agent` CLI, VERCEL is unset so the
 // HTTP + WebSocket server starts normally.

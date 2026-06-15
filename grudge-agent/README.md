@@ -11,6 +11,20 @@
 
 ---
 
+## Deployment status
+
+| Target | Status |
+|---|---|
+| **GitHub Release** | ✅ `v1.1.0` published (source + `npx`) |
+| **Local** | ✅ `npx gruda-agent`, Docker, or Docker Compose (with bundled Ollama) |
+| **Cloud chat** | ✅ Free **Puter** models in-browser — no server-side AI keys required |
+| **Railway** | ⚙️ Config ready (`Dockerfile` + `railway.toml`); **not yet provisioned** — add a Postgres plugin, set service variables, then `railway up` |
+| **Vercel** | ⚙️ `vercel.json` included; **no live deployment** — Railway is the chosen cloud target |
+
+> `MUREKA_API_KEY` / `ELEVENLABS_API_KEY` enable music/voice, and `DATABASE_URL` enables durable Postgres storage. All are optional — features degrade gracefully when unset.
+
+---
+
 ## Quick Start
 
 ### One command — npx (no install)
@@ -81,6 +95,25 @@ The app is a single-page workspace with five tabs:
 | 🎨 **Assets** | Browse and search 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and Grudge Studio |
 | 💬 **Treaty Chat** | Live community relay shared by every GRUDA Agent user |
 | ☁️ **Cloud & Deploy** | Connect Puter, Google Drive, GitHub, and Vercel — push repos and one-click deploy |
+
+---
+
+## Architecture
+
+A single Node process (**Express + WebSocket**) serves the single-page app and a REST/SSE API. Chat runs **locally via Ollama** or **in the browser via free Puter models**; optional integrations (Mureka, ElevenLabs, Postgres, GrudaChain) activate only when their env vars are set. User data lives in per-project files (`gruda.md`, `.gruda/truth.json`) and is mirrored to Postgres when `DATABASE_URL` is present.
+
+```mermaid
+flowchart LR
+  UI["SPA — public/index.html"] -->|REST / SSE / WS| S["Express + ws — server.js"]
+  UI -.->|"puter.ai.chat (free cloud)"| P[("Puter cloud models")]
+  S -->|"/api/chat, /api/agent, /api/orchestrate"| O[("Ollama — local")]
+  S -->|"/api/music"| M[("Mureka API")]
+  S -->|"/api/tts"| E[("ElevenLabs API")]
+  S -->|"write-through + boot hydrate"| DB[("Postgres — optional")]
+  S -->|"gruda.md, .gruda/truth.json"| F[("Local project files")]
+```
+
+**Worker orchestrator:** `POST /api/orchestrate` plans a goal, dispatches focused workers (`code · art3d · lore · balance · campaign · qa`) that share one per-project **communal truth store**, then runs a QA/checks pass — every step appended to `.gruda/orchestrator.log.jsonl` for debugging.
 
 ---
 
