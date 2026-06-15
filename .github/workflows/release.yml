@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: grudge-agent
+        run: npm ci
+
+      - name: Pack npm tarball
+        working-directory: grudge-agent
+        run: npm pack
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: grudge-agent/*.tgz
+          generate_release_notes: true
+          body: |
+            ## GRUDA Agent ${{ github.ref_name }}
+
+            ### Install
+            ```bash
+            npx gruda-agent
+            ```
+            or
+            ```bash
+            npm install -g gruda-agent
+            ```
+
+            ### What's new
+            See full changelog below ↓
+
+      - name: Publish to npm
+        working-directory: grudge-agent
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true

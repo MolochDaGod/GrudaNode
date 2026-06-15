@@ -1,0 +1,40 @@
+name: grudgedot Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'grudgedot/**'
+  workflow_dispatch:
+
+concurrency:
+  group: grudgedot-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy grudgedot to Railway
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: grudgedot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & validate
+        run: |
+          npm install
+          node --check server.js
+          echo "grudgedot syntax OK"
+
+      - name: Deploy to Railway
+        uses: bervProject/railway-deploy@v1.0.0
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          service: grudgedot
