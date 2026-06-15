@@ -1,0 +1,19 @@
+# Keep secrets and local cruft OUT of Vercel deployments
+.env
+.env.*
+!.env.example
+node_modules
+.git
+.gitignore
+.gruda-agent
+gruda-projects
+.vercel
+*.log
+*.gif
+Dockerfile
+.dockerignore
+docker-compose.yml
+railway.toml
+cloudflared.yml
+*.ps1
+*.bat

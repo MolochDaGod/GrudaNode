@@ -29,7 +29,7 @@ const multer    = require("multer");
 const PORT           = parseInt(process.env.PORT || "3200", 10);
 const OLLAMA_HOST    = process.env.OLLAMA_HOST    || "http://127.0.0.1:11434";
 const DEFAULT_MODEL  = process.env.DEFAULT_MODEL  || "mistral:latest";
-const PROJECTS_DIR   = process.env.PROJECTS_DIR   || path.join(os.homedir(), "gruda-projects");
+const PROJECTS_DIR   = process.env.PROJECTS_DIR   || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), "gruda-projects");
 const BRAVE_KEY      = process.env.BRAVE_SEARCH_KEY || "";
 const SPLASH_GIF_1   = process.env.SPLASH_GIF_1  || "";
 const SPLASH_GIF_2   = process.env.SPLASH_GIF_2  || "";
@@ -47,11 +47,12 @@ const ELEVEN_VOICE   = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"
 const ELEVEN_BASE    = "https://api.elevenlabs.io";
 
 /* ── Data dirs ────────────────────────────────────── */
-const DATA_DIR     = process.env.DATA_DIR || path.join(os.homedir(), ".gruda-agent");
+const DATA_DIR     = process.env.DATA_DIR || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), ".gruda-agent");
 const CONFIG_FILE  = path.join(DATA_DIR, "config.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
-fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-fs.mkdirSync(DATA_DIR,     { recursive: true });
+// Best-effort: serverless hosts (Vercel) only allow writes under /tmp
+try { fs.mkdirSync(PROJECTS_DIR, { recursive: true }); } catch {}
+try { fs.mkdirSync(DATA_DIR,     { recursive: true }); } catch {}
 
 /* ── Config helpers ──────────────────────────────────────────── */
 function loadConfig() {
