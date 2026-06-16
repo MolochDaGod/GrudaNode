@@ -1,10 +1,14 @@
-# ⚔️ GRUDA Agent
+<p align="center"><img src="public/gruda-king.png" alt="GRUDA Agent" width="140"></p>
+
+# GRUDA Agent
 
 **Agentic AI workspace by Grudge Studio.** Runs on your machine via [Ollama](https://ollama.com) — or fully in the cloud with **free [Puter](https://puter.com) models** (no install, no API keys) — or deploy it anywhere.
 
 > Build software, make music, generate voiceovers, automate workflows, and run a whole **team of AI workers** — with a persistent, memory-aware agent that knows your projects and follows your rules.
 
 **New in v1.1.0:** free Puter cloud models · 🎵 Mureka music · 🗣️ ElevenLabs voice · 🤝 AI worker orchestrator with a shared “truth” store · upload/unzip/convert tools · user rules + vocal commands · ask-when-unsure agent behavior · expanded Postgres persistence.
+
+**▶ Live:** [gruda-agent.vercel.app](https://gruda-agent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway — full stack + Postgres)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/MolochDaGod/GrudaNode)
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MolochDaGod/GrudaNode)
@@ -18,8 +22,8 @@
 | **GitHub Release** | ✅ `v1.1.0` published (source + `npx`) |
 | **Local** | ✅ `npx gruda-agent`, Docker, or Docker Compose (with bundled Ollama) |
 | **Cloud chat** | ✅ Free **Puter** models in-browser — no server-side AI keys required |
-| **Railway** | ⚙️ Config ready (`Dockerfile` + `railway.toml`); **not yet provisioned** — add a Postgres plugin, set service variables, then `railway up` |
-| **Vercel** | ⚙️ `vercel.json` included; **no live deployment** — Railway is the chosen cloud target |
+| **Railway** | ✅ **Live** — https://grudanode-production.up.railway.app (full stack; Postgres connected) |
+| **Vercel** | ✅ **Live** — https://gruda-agent.vercel.app (UI + serverless API; chat via free Puter models) |
 
 > `MUREKA_API_KEY` / `ELEVENLABS_API_KEY` enable music/voice, and `DATABASE_URL` enables durable Postgres storage. All are optional — features degrade gracefully when unset.
 
@@ -90,7 +94,7 @@ The app is a single-page workspace with five tabs:
 
 | Tab | What's inside |
 |---|---|
-| ⚔️ **AI Workspace** | Chat & Agent modes, model picker, voice input/TTS, per-project `gruda.md` memory |
+| 👑 **AI Workspace** | Chat & Agent modes, model picker, voice input/TTS, per-project `gruda.md` memory |
 | 🖥️ **IDE** | Monaco code editor + project file tree, **▶ Run** (Node sandbox), and **✨ AI Snippet** code generation |
 | 🎨 **Assets** | Browse and search 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and Grudge Studio |
 | 💬 **Treaty Chat** | Live community relay shared by every GRUDA Agent user |
@@ -139,15 +143,13 @@ docker run -d \
   grudastudio/gruda-agent:latest
 ```
 
-### ▲ Vercel (web UI, no Ollama — needs external Ollama URL)
+### ▲ Vercel — [gruda-agent.vercel.app](https://gruda-agent.vercel.app)
 
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MolochDaGod/GrudaNode)
 
-Or via the in-app Cloud & Deploy tab → connect Vercel token → Deploy.
+Serves the UI plus the API as a serverless function; **chat uses free Puter cloud models in the browser** — no Ollama required. To enable music/voice, add `MUREKA_API_KEY` and `ELEVENLABS_API_KEY` as Vercel **Environment Variables** (a `.vercelignore` keeps `.env` out of the bundle — never rely on committing secrets), and point `DATABASE_URL` at a hosted Postgres for durable storage. Deploy from `grudge-agent/` with `vercel --prod`, or use the button above.
 
-Set `OLLAMA_HOST` to your Ollama server URL in Vercel environment variables.
-
-### 🚂 Railway (recommended cloud — free tier + Postgres)
+### 🚂 Railway — [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (recommended cloud — full stack + Postgres)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/MolochDaGod/GrudaNode)
 
@@ -321,7 +323,8 @@ Every GRUDA Agent user automatically joins **Treaty Chat** — Grudge Studio's l
 grudge-agent/
 ├── server.js           # Express + WS backend: agent loop, orchestrator, music, voice, IDE, assets, Postgres (~1000 lines)
 ├── public/
-│   └── index.html      # Full SPA — no build step (~1340 lines)
+│   ├── index.html      # Full SPA — no build step (~1360 lines)
+│   └── gruda-king.png  # Brand icon — favicon, OG image, splash & avatar logo
 ├── bin/
 │   └── gruda-agent.js  # CLI entry: npx gruda-agent
 ├── Dockerfile          # Docker image
@@ -345,6 +348,7 @@ grudge-agent/
 - **Treaty Chat** — live in the app
 - **Grudge Studio** — [grudge-studio.com](https://grudge-studio.com)
 - **GitHub** — [MolochDaGod/GrudaNode](https://github.com/MolochDaGod/GrudaNode)
+- **Project organization** — [docs/ORGANIZATION.md](docs/ORGANIZATION.md)
 - **Issues** — [GitHub Issues](https://github.com/MolochDaGod/GrudaNode/issues)
 
 ---
