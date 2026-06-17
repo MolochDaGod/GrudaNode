@@ -4,6 +4,24 @@ All notable changes to **GRUDA Agent** are documented here.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-17
+Grok Build alignment for cloud agentic actions on gruda-agent.vercel.app.
+### Added
+- **Grok/xAI agent loop** (`lib/grok-build.js`) — tool-using Agent mode on Vercel when `XAI_API_KEY` is set.
+- **Bundled skills** (`skills/design`, `skills/implement`, `skills/grudge-studio`) — Grok Build skills-first pattern.
+- **Grudge Studio resource map** + agentic design theory woven into every agent system prompt.
+- **`GET /api/skills`** and **`GET /api/skills/:id`** — discover skill workflows.
+- **Treaty Chat client** — `sendTreaty`, `updateTreatyStatus`, `onTreatyMsg`; direct WS + HTTP fallback on serverless.
+- **`GET /api/treaty/messages`** — buffered messages when relay is offline.
+### Changed
+- Cloud hosts default to **Agent mode + Grok** when available; Puter models remain for Chat.
+- Health reports `grok`, `skills`, `serverless` status; sidebar shows Grok indicator.
+- Onboarding/config persists via **localStorage** on ephemeral Vercel `/tmp`.
+### Fixed
+- **IDE**: `project` query param for file tree; `path` alias for read/write/run.
+- **WebSocket**: no longer hardcodes `ws://127.0.0.1` on production; local WS uses page host.
+- Agent stream emits `tool_call` events consistently for UI rendering.
+
 ## [1.1.0] - 2026-06-15
 GRUDA Agent grows from a local tool into a cloud-capable agentic workspace.
 ### Added

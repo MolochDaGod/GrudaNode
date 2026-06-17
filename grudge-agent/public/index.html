@@ -411,8 +411,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="proj-list" id="proj-list"></div>
     <div class="sb-new-proj"><button onclick="openNewProj()">+ New Project</button></div>
     <div class="status-bar">
+      <div class="sdot"><div class="dot" id="d-grok"></div>Grok</div>
       <div class="sdot"><div class="dot" id="d-ollama"></div>Ollama</div>
-      <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty Chat</div>
+      <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
     </div>
   </div>
 
@@ -430,7 +431,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="tab-panel active" id="panel-ai">
       <div id="chat-area">
         <div id="msgs">
-          <div id="welcome"><div class="wi">⚔️</div><h2>GRUDA Agent is ready</h2><p>In <strong style="color:var(--accent)">Agent mode</strong> I can search your files, create folders,<br>write code, search the web, and save memory to <code>gruda.md</code>.<br>In <strong style="color:var(--blue)">Chat mode</strong> I stream directly — fast and conversational.</p></div>
+          <div id="welcome"><div class="wi">⚔️</div><h2>GRUDA Agent is ready</h2><p>Grok Build–aligned workspace: <strong style="color:var(--accent)">Agent mode</strong> runs tools (files, web, shell, memory).<br>Use <code>/design</code> <code>/implement</code> or <code>grudge-studio</code> for skills.<br><strong style="color:var(--blue)">Chat mode</strong> streams via Puter — fast and conversational.</p></div>
         </div>
       </div>
       <div id="input-area">
@@ -754,6 +755,8 @@ async function obNext() {
   const models = await fetch("/api/models").then(r=>r.json()).catch(()=>({models:[]}));
   const model = models.models?.[0]?.name || "";
   const data = await fetch("/api/onboarding/complete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({answers,model})}).then(r=>r.json()).catch(()=>({ok:true,systemPrompt:""}));
+  const cfg = { onboarded:true, userName:answers.name, displayName:answers.name, aiName:data.aiName||"GRUDA", systemPrompt:data.systemPrompt||"" };
+  try { localStorage.setItem("gruda_config", JSON.stringify(cfg)); } catch {}
   document.getElementById("ob-ai-thinking").style.display="none";
   document.getElementById("ob-result").style.display="block";
   document.getElementById("ob-prompt-preview").textContent = data.systemPrompt || "Your workspace has been configured.";
@@ -790,7 +793,13 @@ async function initApp() {
   await checkHealth();
   initWS();
   try {
-    const c = await fetch("/api/config").then(r=>r.json());
+    let c = {};
+    try { c = await fetch("/api/config").then(r=>r.json()); } catch {}
+    const local = JSON.parse(localStorage.getItem("gruda_config") || "{}");
+    c = { ...local, ...c };
+    if (c.onboarded && Object.keys(local).length) {
+      fetch("/api/config", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(c) }).catch(()=>{});
+    }
     window.personaSystem = c.systemPrompt || "";
     window.aiName = c.aiName || "GRUDA";
     window.voiceId = c.voiceId || "";
@@ -800,21 +809,37 @@ async function initApp() {
 }
 
 const PUTER_MODELS = ["gpt-4o-mini","gpt-4o","claude-3-5-sonnet","gemini-2.0-flash","deepseek-chat"];
+function isGrokModel(v){ return typeof v==="string" && (v.indexOf("grok:")===0 || v.indexOf("xai:")===0); }
+function isPuterModel(v){ return typeof v==="string" && v.indexOf("puter:")===0; }
+function isCloudHost(){ return location.hostname !== "localhost" && location.hostname !== "127.0.0.1"; }
+
 async function loadModels() {
   const sel=document.getElementById("model-select");
-  const puterOpts=`<optgroup label="Puter (free cloud)">`+
-    PUTER_MODELS.map(m=>`<option value="puter:${m}">${m} (cloud)</option>`).join("")+`</optgroup>`;
-  let ollamaOpts="";
+  const puterOpts=`<optgroup label="Puter (free chat)">`+
+    PUTER_MODELS.map(m=>`<option value="puter:${m}">${m}</option>`).join("")+`</optgroup>`;
+  let grokOpts="", ollamaOpts="";
   try {
     const d=await fetch("/api/models").then(r=>r.json());
     const models=d.models||[];
-    if (models.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
-      models.map(m=>`<option value="${m.name}">${m.name} (local)</option>`).join("")+`</optgroup>`;
-  } catch(e){}
-  sel.innerHTML = ollamaOpts + puterOpts;
-  // Prefer a local model if present, otherwise default to a free Puter cloud model
+    const grok=models.filter(m=>isGrokModel(m.name));
+    const ollama=models.filter(m=>!isGrokModel(m.name));
+    if (grok.length) grokOpts=`<optgroup label="Grok (agent tools)">`+
+      grok.map(m=>`<option value="${m.name}">${(m.label||m.name).replace(/^grok:/,"")}</option>`).join("")+`</optgroup>`;
+    if (ollama.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
+      ollama.map(m=>`<option value="${m.name}">${m.name}</option>`).join("")+`</optgroup>`;
+    window._hasGrok = !!d.grok;
+  } catch(e){ window._hasGrok = false; }
+  sel.innerHTML = grokOpts + ollamaOpts + puterOpts;
+  const firstGrok = sel.querySelector('optgroup[label^="Grok"] option');
   const firstLocal = sel.querySelector('optgroup[label^="Local"] option');
-  currentModel = firstLocal ? firstLocal.value : "puter:"+PUTER_MODELS[0];
+  if (firstGrok && isCloudHost()) {
+    currentModel = firstGrok.value;
+    setMode("agent");
+  } else if (firstLocal) {
+    currentModel = firstLocal.value;
+  } else {
+    currentModel = "puter:"+PUTER_MODELS[0];
+  }
   sel.value = currentModel;
 }
 
@@ -846,21 +871,88 @@ async function refreshMem() {
 }
 
 async function checkHealth() {
-  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:false}));
-  document.getElementById("d-ollama").className="dot"+(h.ollama?" on":"");
-  document.getElementById("d-treaty").className="dot"+(h.treaty?" on":"");
+  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:false,grok:false}));
+  document.getElementById("d-grok")?.classList.toggle("on", !!h.grok);
+  document.getElementById("d-ollama")?.classList.toggle("on", !!h.ollama);
+  document.getElementById("d-treaty")?.classList.toggle("on", !!h.treaty);
+  window._hasGrok = !!h.grok;
 }
 
-/* ── WEBSOCKET (local) ── */
+/* ── TREATY CHAT ── */
+function updateTreatyStatus(online) {
+  const badge = document.getElementById("treaty-status-badge");
+  const tabBadge = document.getElementById("treaty-badge");
+  if (badge) { badge.textContent = online ? "Live" : "Offline"; badge.classList.toggle("live", online); }
+  if (tabBadge) tabBadge.textContent = online ? "●" : "—";
+  document.getElementById("d-treaty")?.classList.toggle("on", online);
+}
+
+function onTreatyMsg(data) {
+  const box = document.getElementById("treaty-msgs");
+  if (!box || !data) return;
+  const el = document.createElement("div");
+  el.className = "tm";
+  const who = data.user || data.displayName || "Anon";
+  const text = data.text || data.message || "";
+  el.innerHTML = `<div class="tm-head"><span class="tm-user">${esc(who)}</span><span class="tm-time">${data.ts ? fmtDate(data.ts) : ""}</span></div><div class="tm-body">${esc(text)}</div>`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendTreaty() {
+  const input = document.getElementById("treaty-input");
+  const text = (input?.value || "").trim();
+  if (!text) return;
+  const payload = { user: displayName, text, ts: Date.now() };
+  if (window._treatyWs?.readyState === WebSocket.OPEN) {
+    window._treatyWs.send(JSON.stringify(payload));
+  } else {
+    const r = await fetch("/api/treaty/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); onTreatyMsg({ user:"System", text: d.error || "Treaty offline — message saved locally only.", ts: Date.now() }); }
+  }
+  input.value = "";
+  onTreatyMsg({ ...payload, user: displayName + " (you)" });
+}
+
+function tryDirectTreatyWS(wsUrl) {
+  if (!wsUrl || window._treatyWs?.readyState === WebSocket.OPEN) return;
+  try {
+    const tws = new WebSocket(wsUrl);
+    tws.onopen = () => updateTreatyStatus(true);
+    tws.onmessage = e => { try { onTreatyMsg(JSON.parse(e.data)); } catch {} };
+    tws.onclose = () => { updateTreatyStatus(false); setTimeout(() => tryDirectTreatyWS(wsUrl), 8000); };
+    tws.onerror = () => updateTreatyStatus(false);
+    window._treatyWs = tws;
+  } catch { updateTreatyStatus(false); }
+}
+
+async function initTreaty() {
+  try {
+    const hist = await fetch("/api/treaty/messages").then(r=>r.json());
+    (hist.messages||[]).forEach(m => onTreatyMsg(m));
+  } catch {}
+  try {
+    const s = await fetch("/api/treaty/status").then(r=>r.json());
+    updateTreatyStatus(!!s.connected);
+    if (s.directWs) tryDirectTreatyWS(s.directWs);
+    else if (!s.connected) updateTreatyStatus(false);
+  } catch { updateTreatyStatus(false); }
+}
+
+/* ── WEBSOCKET (local server relay) ── */
 function initWS() {
-  ws=new WebSocket(`ws://127.0.0.1:${location.port||3200}`);
-  ws.onmessage=e=>{
-    const d=JSON.parse(e.data);
-    if (d.type==="treaty_status") updateTreatyStatus(d.online);
-    if (d.type==="treaty_msg")   onTreatyMsg(d.data);
-    if (d.type==="connected" && d.displayName) displayName=d.displayName||displayName;
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  initTreaty();
+  if (!isLocal) return;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.hostname}:${location.port || 3200}`);
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === "treaty_status") updateTreatyStatus(d.online);
+    if (d.type === "treaty_msg") onTreatyMsg(d.data);
+    if (d.type === "connected" && d.displayName) displayName = d.displayName || displayName;
   };
-  ws.onclose=()=>setTimeout(initWS,5000);
+  ws.onclose = () => setTimeout(initWS, 5000);
 }
 
 /* ── TABS ── */
@@ -1170,7 +1262,8 @@ function autoResize(el) { el.style.height="auto"; el.style.height=Math.min(el.sc
 async function send() {
   const box=document.getElementById("input-box");
   const txt=box.value.trim();
-  if(!txt||isStreaming||!currentModel)return;
+  if(!txt||isStreaming)return;
+  if(!currentModel && currentMode==="chat") return;
   document.getElementById("welcome")?.remove();
   box.value=""; autoResize(box);
   const um={role:"user",content:txt};
@@ -1330,7 +1423,6 @@ async function speak(text){
 }
 
 /* ── Puter free cloud models (key-free, user-pays) ── */
-function isPuterModel(v){ return typeof v==="string" && v.indexOf("puter:")===0; }
 async function puterChatStream(msgs, model, bodyEl){
   if(typeof puter==="undefined" || !puter.ai){ bodyEl.textContent="Puter SDK not loaded"; return ""; }
   let full="";

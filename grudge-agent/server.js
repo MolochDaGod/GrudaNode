@@ -24,6 +24,10 @@ require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const express   = require("express");
 const WebSocket = require("ws");
 const multer    = require("multer");
+const grokBuild = require("./lib/grok-build");
+
+const SKILLS_DIR = path.join(__dirname, "skills");
+let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
 
 /* ── Config ──────────────────────────────────────────────────── */
 const PORT           = parseInt(process.env.PORT || "3200", 10);
@@ -45,6 +49,9 @@ const MUREKA_BASE    = process.env.MUREKA_BASE    || "https://api.mureka.ai";
 const ELEVEN_KEY     = process.env.ELEVENLABS_API_KEY || "";
 const ELEVEN_VOICE   = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Rachel (default)
 const ELEVEN_BASE    = "https://api.elevenlabs.io";
+
+/* ── Grok / xAI (cloud agent) ─────────────────────────────────── */
+const XAI_KEY = process.env.XAI_API_KEY || "";
 
 /* ── Data dirs ────────────────────────────────────── */
 const DATA_DIR     = process.env.DATA_DIR || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), ".gruda-agent");
@@ -86,14 +93,15 @@ function buildPersona(cfg, memory, systemExtra) {
   const aiName = (cfg && cfg.aiName) || "GRUDA Agent";
   const cmds  = (cfg && Array.isArray(cfg.talkCommands)) ? cfg.talkCommands.filter(c => c && c.phrase) : [];
   const rules = (cfg && Array.isArray(cfg.rules)) ? cfg.rules.filter(Boolean) : [];
-  return (
+  const base = (
     `You are ${aiName}, a personal agentic AI built on GRUDA Agent by Grudge Studio (RacAlvin The Pirate King). ` +
-    `You help the computer's owner get real work done — like Warp's agent, but theirs.\n` +
-    `You may run locally via Ollama or in the cloud via Puter. Tools available: search/read/write files, create folders, run shell commands (npm/node/git), unzip archives, convert files, search the web, open URLs, generate music (Mureka) and images, and update gruda.md memory.\n\n` +
+    `You align with Grok Build patterns: skills-first workflows, plan-before-act, tool-call discipline, and gruda.md memory.\n` +
+    `You may run locally via Ollama, in the cloud via Grok (xAI), or chat via Puter. Tools: search/read/write files, folders, shell (npm/node/git), unzip, convert, web search, browse URLs, music (Mureka), and update_memory.\n\n` +
     `Operating principles:\n` +
-    `- If a request is ambiguous or could be done multiple meaningfully different ways, ASK ONE concise clarifying question before acting — don't guess on irreversible or large actions.\n` +
-    `- Prefer doing over describing: when asked to build/create/deploy, use your tools and do it.\n` +
-    `- Save important context to gruda.md — it is your long-term memory.\n\n` +
+    `- If a request is ambiguous or could be done multiple meaningfully different ways, ASK ONE concise clarifying question before acting.\n` +
+    `- Prefer doing over describing: when asked to build/create/deploy, use your tools.\n` +
+    `- Save important context to gruda.md — long-term memory.\n` +
+    `- Slash-style intents: /design (architecture doc), /implement (build+review), grudge-studio (platform context).\n\n` +
     ((cfg && cfg.systemPrompt) ? `## Who you're helping\n${cfg.systemPrompt}\n\n` : "") +
     (rules.length ? `## User rules (always follow)\n` + rules.map(r => `- ${r}`).join("\n") + `\n\n` : "") +
     (cmds.length ? `## Custom talk / vocal commands the user may type or say\n` + cmds.map(c => `- "${c.phrase}" → ${c.action || c.prompt || "custom action"}`).join("\n") + `\n\n` : "") +
@@ -101,6 +109,7 @@ function buildPersona(cfg, memory, systemExtra) {
     (systemExtra || "") +
     `Be direct and helpful.`
   );
+  return grokBuild.augmentSystemPrompt(base, _bundledSkills);
 }
 
 /* ── Express + WS ────────────────────────────────────────────── */
@@ -140,7 +149,8 @@ function connectTreaty() {
   } catch { /* treaty is optional */ }
 }
 
-if (TREATY_URL) setTimeout(connectTreaty, 2000);
+// Treaty relay needs a persistent process — skip eager connect on serverless
+if (TREATY_URL && !process.env.VERCEL) setTimeout(connectTreaty, 2000);
 
 /* ── Tool Definitions ────────────────────────────────────────── */
 const TOOLS = [
@@ -314,10 +324,10 @@ async function executeTool(name, args, projectDir) {
   } catch(err) { return { error: err.message }; }
 }
 
-/* ── Agent SSE stream ────────────────────────────────────────── */
+/* ── Agent SSE stream (Ollama local · Grok cloud) ───────────── */
 app.post("/api/agent/stream", async (req, res) => {
   const { messages, model, projectDir, systemExtra } = req.body;
-  if (!messages || !model) return res.status(400).json({ error:"messages and model required" });
+  if (!messages) return res.status(400).json({ error:"messages required" });
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -327,8 +337,25 @@ app.post("/api/agent/stream", async (req, res) => {
   const memPath = path.join(pDir, "gruda.md");
   const memory  = fs.existsSync(memPath) ? fs.readFileSync(memPath, "utf8") : "";
   const cfg     = loadConfig();
+  const system  = buildPersona(cfg, memory, systemExtra);
 
-  const system = buildPersona(cfg, memory, systemExtra);
+  const useGrok = grokBuild.isGrokModel(model) || (!model && grokBuild.hasGrokApi()) ||
+    (process.env.VERCEL && grokBuild.hasGrokApi() && !String(model || "").startsWith("puter:"));
+  const grokModel = grokBuild.isGrokModel(model) ? model : (grokBuild.hasGrokApi() ? "grok:grok-3-mini" : null);
+
+  if (useGrok && grokBuild.hasGrokApi()) {
+    await grokBuild.runGrokAgentLoop({
+      emit, messages, model: grokModel, tools: TOOLS,
+      executeTool, projectDir: pDir, system,
+    });
+    return res.end();
+  }
+
+  const ollamaModel = model || DEFAULT_MODEL;
+  if (String(ollamaModel).startsWith("puter:")) {
+    emit({ type:"error", message:"Agent mode needs Ollama (local) or Grok (set XAI_API_KEY on Vercel). Use Chat mode with Puter models for conversational replies." });
+    return res.end();
+  }
 
   let loopMsgs = [{ role:"system", content:system }, ...messages];
   const toolLog = [];
@@ -340,10 +367,16 @@ app.post("/api/agent/stream", async (req, res) => {
     try {
       ollamaRes = await fetch(`${OLLAMA_HOST}/api/chat`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model, messages:loopMsgs, tools:TOOLS, stream:false }),
+        body: JSON.stringify({ model:ollamaModel, messages:loopMsgs, tools:TOOLS, stream:false }),
         signal: AbortSignal.timeout(120000),
       });
-    } catch(err) { emit({ type:"error", message:`Ollama unreachable: ${err.message}` }); return res.end(); }
+    } catch(err) {
+      const hint = grokBuild.hasGrokApi()
+        ? "Ollama unreachable. Select a Grok model for cloud agent mode."
+        : "Ollama unreachable. Run locally or set XAI_API_KEY for Grok agent on Vercel.";
+      emit({ type:"error", message:`${hint} (${err.message})` });
+      return res.end();
+    }
 
     if (!ollamaRes.ok) { emit({ type:"error", message:`Ollama ${ollamaRes.status}` }); return res.end(); }
 
@@ -361,6 +394,7 @@ app.post("/api/agent/stream", async (req, res) => {
     for (const tc of msg.tool_calls) {
       const toolName = tc.function.name;
       const toolArgs = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function.arguments||{});
+      emit({ type:"tool_call", tool:toolName, args:toolArgs });
       emit({ type:"tool_start", tool:toolName, args:toolArgs });
       const result = await executeTool(toolName, toolArgs, pDir);
       toolLog.push({ tool:toolName, args:toolArgs, result });
@@ -471,8 +505,27 @@ app.post("/api/onboarding/complete", async (req, res) => {
 
 /* ── Models ──────────────────────────────────────────────────── */
 app.get("/api/models", async (_req, res) => {
-  try { const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal:AbortSignal.timeout(5000) }); res.json(await r.json()); }
-  catch { res.json({ models:[] }); }
+  const grok = grokBuild.listGrokModels();
+  try {
+    const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal:AbortSignal.timeout(5000) });
+    const d = await r.json();
+    const ollama = (d.models || []).map(m => ({ name: m.name, provider: "ollama" }));
+    return res.json({ models: [...grok, ...ollama], grok: grokBuild.hasGrokApi(), ollama: ollama.length > 0 });
+  } catch {
+    res.json({ models: grok, grok: grokBuild.hasGrokApi(), ollama: false });
+  }
+});
+
+/* ── Skills (Grok Build pattern) ─────────────────────────────── */
+app.get("/api/skills", (_req, res) => {
+  _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
+  res.json({ skills: _bundledSkills.map(s => ({ id: s.id, name: s.name, description: s.description })) });
+});
+
+app.get("/api/skills/:id", (req, res) => {
+  const skill = _bundledSkills.find(s => s.id === req.params.id || s.name === req.params.id);
+  if (!skill) return res.status(404).json({ error: "skill not found" });
+  res.json(skill);
 });
 
 app.post("/api/models/pull", async (req, res) => {
@@ -549,16 +602,33 @@ app.patch("/api/config", (req, res) => {
 });
 
 /* ── Treaty Chat relay endpoint ──────────────────────────────── */
+const treatyBuffer = [];
+const TREATY_BUF_MAX = 200;
+
 app.post("/api/treaty/send", (req, res) => {
-  if (!treatyWs || treatyWs.readyState !== WebSocket.OPEN) {
-    return res.status(503).json({ error:"Treaty Chat not connected" });
+  const payload = { ...req.body, ts: req.body.ts || Date.now(), id: `t-${Date.now()}` };
+  if (treatyWs && treatyWs.readyState === WebSocket.OPEN) {
+    try { treatyWs.send(JSON.stringify(payload)); return res.json({ ok: true, relayed: true }); }
+    catch (err) { return res.status(500).json({ error: err.message }); }
   }
-  try { treatyWs.send(JSON.stringify(req.body)); res.json({ ok:true }); }
-  catch(err) { res.status(500).json({ error:err.message }); }
+  // Serverless fallback: buffer locally; clients may also connect directly to treaty URL
+  treatyBuffer.push(payload);
+  if (treatyBuffer.length > TREATY_BUF_MAX) treatyBuffer.shift();
+  broadcast({ type: "treaty_msg", data: payload });
+  res.json({ ok: true, relayed: false, buffered: true });
 });
 
 app.get("/api/treaty/status", (_req, res) => {
-  res.json({ connected: !!(treatyWs && treatyWs.readyState === WebSocket.OPEN), url: TREATY_URL });
+  res.json({
+    connected: !!(treatyWs && treatyWs.readyState === WebSocket.OPEN),
+    url: TREATY_URL,
+    serverless: !!process.env.VERCEL,
+    directWs: TREATY_URL ? TREATY_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws" : null,
+  });
+});
+
+app.get("/api/treaty/messages", (_req, res) => {
+  res.json({ messages: treatyBuffer.slice(-50) });
 });
 
 /* ── Splash media ────────────────────────────────────────────── */
@@ -579,7 +649,11 @@ app.get("/api/health", async (_req, res) => {
   let ollama = false;
   try { const r = await fetch(`${OLLAMA_HOST}/api/tags`); ollama = r.ok; } catch {}
   const treaty = !!(treatyWs && treatyWs.readyState === WebSocket.OPEN);
-  res.json({ ok:true, ollama, treaty, db: pgReady, music: !!MUREKA_KEY, voice: !!ELEVEN_KEY });
+  res.json({
+    ok: true, ollama, treaty, grok: grokBuild.hasGrokApi(),
+    skills: _bundledSkills.length, serverless: !!process.env.VERCEL,
+    db: pgReady, music: !!MUREKA_KEY, voice: !!ELEVEN_KEY,
+  });
 });
 
 
@@ -595,8 +669,11 @@ app.get("/api/health", async (_req, res) => {
 
 /* ── Run code (Node.js sandbox) ──────────────────────────────── */
 app.post("/api/ide/run", (req, res) => {
-  const { code, lang = "javascript" } = req.body;
-  if (!code) return res.status(400).json({ error: "code required" });
+  let { code, path: filePath, lang = "javascript" } = req.body;
+  if (!code && filePath && fs.existsSync(filePath)) {
+    code = fs.readFileSync(filePath, "utf8");
+  }
+  if (!code) return res.status(400).json({ error: "code or path required" });
 
   const { spawn } = require("child_process");
   const tmp = path.join(os.tmpdir(), `gruda_run_${Date.now()}.js`);
@@ -615,7 +692,8 @@ app.post("/api/ide/run", (req, res) => {
 
 /* ── File tree for IDE ───────────────────────────────────────── */
 app.get("/api/ide/tree", (req, res) => {
-  const dir = req.query.dir || (activeProject ? path.join(PROJECTS_DIR, activeProject) : PROJECTS_DIR);
+  const proj = req.query.project || req.query.proj;
+  const dir = req.query.dir || (proj ? path.join(PROJECTS_DIR, proj) : PROJECTS_DIR);
   const SKIP = new Set(["node_modules",".git","dist","build",".next","__pycache__",".DS_Store"]);
   function walk(d, depth=0) {
     if (depth > 6) return [];
@@ -624,25 +702,27 @@ app.get("/api/ide/tree", (req, res) => {
       .map(e => {
         const full = path.join(d, e.name);
         const isDir = e.isDirectory();
-        return { name: e.name, path: full, isDir,
+        return {
+          name: e.name, path: full, type: isDir ? "dir" : "file",
           ext: isDir ? null : path.extname(e.name).slice(1),
-          children: isDir ? walk(full, depth+1) : null };
+          children: isDir ? walk(full, depth+1) : undefined,
+        };
       });
   }
-  let activeProject = null;
   try { res.json({ tree: walk(dir), root: dir }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ── Read/write file for IDE ────────────────────────────────── */
 app.get("/api/ide/file", (req, res) => {
-  const { p } = req.query;
+  const p = req.query.path || req.query.p;
   if (!p || !fs.existsSync(p)) return res.status(404).json({ error: "not found" });
   res.json({ content: fs.readFileSync(p, "utf8"), path: p });
 });
 
 app.post("/api/ide/file", (req, res) => {
-  const { p, content } = req.body;
+  const p = req.body.path || req.body.p;
+  const { content } = req.body;
   if (!p) return res.status(400).json({ error: "path required" });
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, content || "", "utf8");
