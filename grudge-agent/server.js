@@ -40,6 +40,14 @@ const SPLASH_GIF_2   = process.env.SPLASH_GIF_2  || "";
 const MASTER_NODE    = process.env.MASTER_NODE_URL || "";
 const TREATY_URL     = process.env.TREATY_CHAT_URL || MASTER_NODE || "https://master.grudge-studio.com";
 
+/* ── Grudge R2 / asset CDN ───────────────────────────────────── */
+const GRUDGE_R2_CDN    = (process.env.GRUDGE_R2_CDN    || "https://assets.grudge-studio.com").replace(/\/$/, "");
+const GRUDGE_ASSET_API = (process.env.GRUDGE_ASSET_API || "https://api.grudge-studio.com").replace(/\/$/, "");
+
+/* ── Grudge identity / SSO ──────────────────────────────────── */
+const GRUDGE_AUTH_URL    = (process.env.GRUDGE_AUTH_URL    || "https://id.grudge-studio.com").replace(/\/$/, "");
+const GRUDGE_ACCOUNT_URL = (process.env.GRUDGE_ACCOUNT_URL || "").replace(/\/$/, "");
+
 /* ── Music (Mureka) ──────────────────────────────────────────── */
 const MUREKA_KEY     = process.env.MUREKA_API_KEY || "";
 const MUREKA_MODEL   = process.env.MUREKA_MODEL   || "auto";
@@ -601,6 +609,13 @@ app.patch("/api/config", (req, res) => {
   res.json({ ok:true, config:cfg });
 });
 
+/* ── Grudge auth config ── the SPA reads where to link a Puter ID to a Grudge ID */
+app.get("/api/auth/config", (_req, res) => res.json({
+  authUrl: GRUDGE_AUTH_URL,
+  accountUrl: GRUDGE_ACCOUNT_URL,
+  linkEnabled: !!GRUDGE_ACCOUNT_URL,
+}));
+
 /* ── Treaty Chat relay endpoint ──────────────────────────────── */
 const treatyBuffer = [];
 const TREATY_BUF_MAX = 200;
@@ -693,7 +708,8 @@ app.post("/api/ide/run", (req, res) => {
 /* ── File tree for IDE ───────────────────────────────────────── */
 app.get("/api/ide/tree", (req, res) => {
   const proj = req.query.project || req.query.proj;
-  const dir = req.query.dir || (proj ? path.join(PROJECTS_DIR, proj) : PROJECTS_DIR);
+  const requested = req.query.dir || (proj ? path.join(PROJECTS_DIR, proj) : PROJECTS_DIR);
+  const dir = fs.existsSync(requested) ? requested : PROJECTS_DIR;
   const SKIP = new Set(["node_modules",".git","dist","build",".next","__pycache__",".DS_Store"]);
   function walk(d, depth=0) {
     if (depth > 6) return [];
@@ -731,7 +747,9 @@ app.post("/api/ide/file", (req, res) => {
 
 /* ── AI snippet generation ───────────────────────────────────── */
 app.post("/api/ide/snippet", async (req, res) => {
-  const { prompt, lang = "javascript", model } = req.body;
+  const prompt = req.body.prompt || req.body.context;
+  const lang = req.body.lang || req.body.language || "javascript";
+  const model = req.body.model;
   if (!prompt) return res.status(400).json({ error: "prompt required" });
   const m = model || DEFAULT_MODEL;
   const systemMsg = `You are an expert ${lang} developer. Return ONLY clean, working code with no explanation and no markdown fences. Just the raw code.`;
@@ -744,7 +762,8 @@ app.post("/api/ide/snippet", async (req, res) => {
       })
     });
     const d = await r.json();
-    res.json({ code: d.message?.content || "", lang });
+    const code = d.message?.content || "";
+    res.json({ code, snippet: code, lang });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -814,6 +833,116 @@ app.get("/api/assets/grudge", async (_req, res) => {
     { name:"Weapon Pack",    type:"model", url:"https://grudge-studio.com/assets/weapons",    thumb:"https://grudge-studio.com/favicon.ico" },
     { name:"Environment",    type:"texture", url:"https://grudge-studio.com/assets/env",      thumb:"https://grudge-studio.com/favicon.ico" },
   ]});
+});
+
+/* ── Grudge R2 assets (asset-api registry + R2 CDN) ──────────── */
+// Lists real Grudge assets from the asset-api Worker and normalizes them to the
+// card shape the Assets tab already renders. URLs resolve to the R2 CDN.
+app.get("/api/assets/r2", async (req, res) => {
+  const { q = "", category = "", limit = "60" } = req.query;
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (category && category !== "all") params.set("category", category);
+  params.set("limit", String(Math.min(parseInt(limit, 10) || 60, 120)));
+  try {
+    const r = await fetch(`${GRUDGE_ASSET_API}/assets?${params}`, { signal: AbortSignal.timeout(12000) });
+    if (r.ok) {
+      const d = await r.json();
+      const rows = d.assets || d.results || d.rows || (Array.isArray(d) ? d : []);
+      const cdn = (k) => (k ? `${GRUDGE_R2_CDN}/${String(k).replace(/^\//, "")}` : "");
+      const assets = rows.map((a) => {
+        const key = a.r2_key || a.r2Key || a.key || a.path || "";
+        return {
+          name: a.name || (key.split("/").pop() || "asset"),
+          type: a.type || a.category || "model",
+          category: a.category || "",
+          tier: a.tier || a.iteration || "",
+          url: a.url || cdn(key) || a.download || "",
+          thumbnail: a.thumb || a.thumbnail || cdn(a.thumb_key || a.thumbKey),
+          r2Key: key,
+        };
+      });
+      return res.json({ assets, total: d.total || assets.length, source: "asset-api" });
+    }
+  } catch {}
+  res.json({ assets: [], total: 0, source: "fallback",
+    note: `Grudge asset-api unreachable. Set GRUDGE_ASSET_API (now ${GRUDGE_ASSET_API}) or check connectivity.` });
+});
+
+// CORS-safe passthrough so the sandboxed Environment iframe can fetch GLB/FBX/
+// textures from the R2 CDN without CORS issues. Read-only, key-validated.
+app.options(/^\/api\/r2\/(.*)/, (_req, res) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.end(); });
+app.get(/^\/api\/r2\/(.*)/, async (req, res) => {
+  const key = (req.params[0] || "").replace(/^\/+/, "");
+  if (!key || key.includes("..")) return res.status(400).json({ error: "bad asset key" });
+  try {
+    const r = await fetch(`${GRUDGE_R2_CDN}/${key}`, { signal: AbortSignal.timeout(20000) });
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
+    if (!r.ok) return res.status(r.status).end();
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   ENVIRONMENT — agentic Three.js / Rapier / Phaser / Node studio
+   Scene generation (LLM) + per-project save/load of scene code.
+   ═══════════════════════════════════════════════════════════════ */
+function stripFences(s) {
+  return String(s || "").replace(/^\s*```[a-z]*\n?/i, "").replace(/```\s*$/i, "").trim();
+}
+function envSystemPrompt(engine) {
+  const base = "You are the GRUDA Environment Worker. Return ONLY runnable code with NO markdown fences and NO prose. " +
+    "Load Grudge assets via the global assetUrl('/models/...') helper (it resolves to the R2 CDN). " +
+    "Always clean up: stop the loop and dispose geometries/materials/renderer on teardown.";
+  if (engine === "rapier") return base + " Target: an ES module using bare imports 'three', 'three/addons/...', and '@dimforge/rapier3d-compat'. await RAPIER.init() before using physics; step the world at a fixed timestep inside the animation loop; sync mesh transforms from rigid bodies.";
+  if (engine === "phaser") return base + " Target: an ES module using a bare import of 'phaser'. Create a Phaser.Game with a Scene (preload/create/update). Keep the canvas sized to the window.";
+  if (engine === "node")  return base + " Target: a self-contained Node.js script (CommonJS or ESM) that logs output to stdout. No browser/DOM APIs.";
+  return base + " Target: an ES module using bare imports 'three' and 'three/addons/...'. Set up renderer, scene, a PerspectiveCamera and OrbitControls, lights, and a requestAnimationFrame loop. Handle window resize.";
+}
+
+app.post("/api/env/scene", async (req, res) => {
+  const { prompt, engine = "three", model } = req.body;
+  if (!prompt) return res.status(400).json({ error: "prompt required" });
+  try {
+    const code = await llmComplete(model || DEFAULT_MODEL, envSystemPrompt(engine), prompt, 90000);
+    res.json({ ok: true, engine, code: stripFences(code) });
+  } catch (e) {
+    res.status(500).json({ error: `Scene generation failed (${e.message}). Run Ollama/set OLLAMA_HOST, or pick a Puter cloud model (generated in-browser).` });
+  }
+});
+
+function scenesDir(project) {
+  const safe = (project || "_default").replace(/[^a-z0-9_\-. ]/gi, "_");
+  return path.join(PROJECTS_DIR, safe, ".gruda", "scenes");
+}
+app.get("/api/env/scenes", (req, res) => {
+  const dir = scenesDir(req.query.project);
+  let scenes = [];
+  try {
+    scenes = fs.readdirSync(dir).filter(f => f.endsWith(".json")).map(f => {
+      try { const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+        return { id: f.replace(/\.json$/, ""), name: j.name || f, engine: j.engine || "three", savedAt: j.savedAt }; }
+      catch { return null; }
+    }).filter(Boolean);
+  } catch {}
+  res.json({ scenes });
+});
+app.get("/api/env/scenes/:id", (req, res) => {
+  const f = path.join(scenesDir(req.query.project), req.params.id.replace(/[^a-z0-9_\-.]/gi, "_") + ".json");
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "not found" });
+  try { res.json(JSON.parse(fs.readFileSync(f, "utf8"))); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/env/scenes", (req, res) => {
+  const { project, name, engine = "three", code = "" } = req.body;
+  if (!name) return res.status(400).json({ error: "name required" });
+  const dir = scenesDir(project); fs.mkdirSync(dir, { recursive: true });
+  const id = name.replace(/[^a-z0-9_\-.]/gi, "_");
+  fs.writeFileSync(path.join(dir, id + ".json"),
+    JSON.stringify({ name, engine, code, savedAt: new Date().toISOString() }, null, 2), "utf8");
+  res.json({ ok: true, id });
 });
 
 /* ═══════════════════════════════════════════════════════════════

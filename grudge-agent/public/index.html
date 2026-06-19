@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GRUDA Agent — Grudge Studio</title>
+<meta name="description" content="GRUDA Agent — agentic AI workspace by Grudge Studio (local Ollama or free Puter cloud) with music, voice, IDE, and a worker orchestrator.">
+<meta name="theme-color" content="#ff6b00">
+<link rel="icon" type="image/png" href="/gruda-king.png">
+<link rel="shortcut icon" type="image/png" href="/gruda-king.png">
+<link rel="apple-touch-icon" href="/gruda-king.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="GRUDA Agent — Grudge Studio">
+<meta property="og:description" content="Your personal agentic AI workspace. Local AI · No Cloud · No Keys.">
+<meta property="og:image" content="/gruda-king.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="/gruda-king.png">
 <script src="https://js.puter.com/v2/" async></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 <style>
@@ -279,6 +290,36 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* ── BRAND ICON (GRUDA king) ── */
+.gruda-ico{height:1.15em;width:1.15em;border-radius:3px;object-fit:cover;vertical-align:-0.22em;display:inline-block;}
+.brand-logo{width:104px;height:104px;border-radius:20px;object-fit:cover;box-shadow:0 0 30px rgba(255,107,0,.35);border:1px solid var(--border);}
+.splash-logo{max-height:200px;max-width:200px;border-radius:22px;object-fit:cover;box-shadow:0 0 44px rgba(255,107,0,.4);border:1px solid var(--border);}
+.avatar img,.avatar-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;}
+
+/* ── ENVIRONMENT TAB ── */
+#env-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
+#env-left{display:flex;flex-direction:column;width:44%;min-width:280px;border-right:1px solid var(--border);}
+#env-right{display:flex;flex-direction:column;flex:1;min-width:0;}
+#env-toolbar,#env-runbar{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;}
+#env-editor{flex:1;min-height:0;}
+#env-engine,#env-scene-list{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:.76rem;outline:none;}
+.env-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text);font-size:.76rem;cursor:pointer;transition:all .15s;}
+.env-btn:hover{border-color:var(--accent);color:var(--accent);}
+.env-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;}
+.env-status{font-size:.72rem;color:var(--muted);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#env-frame{flex:1;width:100%;border:0;background:#0b0b12;min-height:0;}
+.env-console{height:0;margin:0;padding:0 10px;background:#000;color:#9f9;border-top:1px solid var(--border);font-family:'Consolas',monospace;font-size:.72rem;overflow:auto;white-space:pre-wrap;transition:height .15s;}
+.env-console.show{height:104px;padding:6px 10px;}
+.env-console .e{color:#ff6b6b;}
+
+/* ── LOGIN (Grudge identity) ── */
+.login-chip{display:flex;align-items:center;gap:6px;font-size:.7rem;color:var(--muted);padding:2px 0;min-height:18px;overflow:hidden;}
+.login-chip .gruda-ico{height:14px;width:14px;}
+.login-chip .gid{color:var(--muted);}
+.login-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:.72rem;cursor:pointer;transition:all .15s;}
+.login-btn:hover{border-color:var(--accent);color:var(--accent);}
+.login-btn .gruda-ico{height:14px;width:14px;}
 </style>
 </head>
 <body>
@@ -302,7 +343,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div id="onboarding">
   <div class="ob-box">
     <div class="ob-header">
-      <h2>Welcome to GRUDA Agent ⚔️</h2>
+      <h2>Welcome to GRUDA Agent <img src="/gruda-king.png" alt="" class="gruda-ico"></h2>
       <p>Let's set up your personal AI workspace. This takes about 60 seconds.</p>
       <div class="ob-progress"><div class="ob-progress-fill" id="ob-fill" style="width:20%"></div></div>
     </div>
@@ -401,9 +442,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </div>
     <div class="sb-label">Navigate</div>
     <div class="sb-nav">
-      <button class="nav-btn active" id="nav-ai" onclick="showTab('ai')">⚔️ AI Workspace</button>
+      <button class="nav-btn active" id="nav-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</button>
       <button class="nav-btn" id="nav-treaty" onclick="showTab('treaty')">💬 Treaty Chat</button>
       <button class="nav-btn" id="nav-ide" onclick="showTab('ide')">🖥️ IDE</button>
+      <button class="nav-btn" id="nav-env" onclick="showTab('env')">🎮 Environment</button>
       <button class="nav-btn" id="nav-assets" onclick="showTab('assets')">🎨 Assets</button>
       <button class="nav-btn" id="nav-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</button>
     </div>
@@ -411,6 +453,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="proj-list" id="proj-list"></div>
     <div class="sb-new-proj"><button onclick="openNewProj()">+ New Project</button></div>
     <div class="status-bar">
+      <div id="login-chip" class="login-chip"></div>
       <div class="sdot"><div class="dot" id="d-grok"></div>Grok</div>
       <div class="sdot"><div class="dot" id="d-ollama"></div>Ollama</div>
       <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
@@ -420,9 +463,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <!-- Main content -->
   <div id="main">
     <div id="tabs">
-      <div class="tab active" id="tab-ai" onclick="showTab('ai')">⚔️ AI Workspace</div>
+      <div class="tab active" id="tab-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</div>
       <div class="tab" id="tab-treaty" onclick="showTab('treaty')">💬 Treaty Chat <span id="treaty-badge" class="treaty-badge" style="margin-left:4px">—</span></div>
       <div class="tab" id="tab-ide" onclick="showTab('ide')">🖥️ IDE</div>
+      <div class="tab" id="tab-env" onclick="showTab('env')">🎮 Environment</div>
       <div class="tab" id="tab-assets" onclick="showTab('assets')">🎨 Assets</div>
       <div class="tab" id="tab-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</div>
     </div>
@@ -431,7 +475,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="tab-panel active" id="panel-ai">
       <div id="chat-area">
         <div id="msgs">
-          <div id="welcome"><div class="wi">⚔️</div><h2>GRUDA Agent is ready</h2><p>Grok Build–aligned workspace: <strong style="color:var(--accent)">Agent mode</strong> runs tools (files, web, shell, memory).<br>Use <code>/design</code> <code>/implement</code> or <code>grudge-studio</code> for skills.<br><strong style="color:var(--blue)">Chat mode</strong> streams via Puter — fast and conversational.</p></div>
+          <div id="welcome"><div class="wi"><img src="/gruda-king.png" alt="GRUDA Agent" class="brand-logo"></div><h2>GRUDA Agent is ready</h2><p>Grok Build–aligned workspace: <strong style="color:var(--accent)">Agent mode</strong> runs tools (files, web, shell, memory).<br>Use <code>/design</code> <code>/implement</code> or <code>grudge-studio</code> for skills.<br><strong style="color:var(--blue)">Chat mode</strong> streams via Puter — fast and conversational.</p></div>
         </div>
       </div>
       <div id="input-area">
@@ -451,7 +495,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="tab-panel" id="panel-treaty">
       <div id="treaty-panel">
         <div class="treaty-header">
-          <span class="treaty-title">⚔️ Treaty Chat — Grudge Studio Community</span>
+          <span class="treaty-title"><img src="/gruda-king.png" alt="" class="gruda-ico"> Treaty Chat — Grudge Studio Community</span>
           <span class="treaty-badge" id="treaty-status-badge">Connecting…</span>
         </div>
         <div id="treaty-msgs">
@@ -496,6 +540,39 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       </div>
     </div>
 
+    <!-- Environment Tab -->
+    <div class="tab-panel" id="panel-env">
+      <div id="env-wrap">
+        <div id="env-left">
+          <div id="env-toolbar">
+            <select id="env-engine" onchange="envOnEngine()" title="Engine / template">
+              <option value="three">Three.js</option>
+              <option value="rapier">Three.js + Rapier</option>
+              <option value="phaser">Phaser (2D)</option>
+              <option value="node">Node (server)</option>
+            </select>
+            <button class="env-btn" onclick="envInsertTemplate()" title="Load the starter template for this engine">Template</button>
+            <button class="env-btn" onclick="envGenerate()" title="Generate a scene with the selected AI model">🤖 Generate</button>
+            <select id="env-scene-list" onchange="envLoadSelected(this.value)" style="display:none"></select>
+            <button class="env-btn" onclick="envSave()">💾 Save</button>
+            <span id="env-status" class="env-status"></span>
+          </div>
+          <div id="env-editor"></div>
+        </div>
+        <div id="env-right">
+          <div id="env-runbar">
+            <button class="env-btn primary" onclick="envPlay()">▶ Play</button>
+            <button class="env-btn" onclick="envStop()">⏹ Stop</button>
+            <button class="env-btn" onclick="envPlay()">↺ Reload</button>
+            <button class="env-btn" onclick="envFullscreen()">⤢ Play mode</button>
+            <span id="env-engine-label" class="env-status"></span>
+          </div>
+          <iframe id="env-frame" title="Scene preview" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; xr-spatial-tracking; gamepad"></iframe>
+          <pre id="env-console" class="env-console"></pre>
+        </div>
+      </div>
+    </div>
+
     <!-- Assets Tab -->
     <div class="tab-panel" id="panel-assets" style="flex-direction:column;">
       <div class="asset-toolbar">
@@ -519,21 +596,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <!-- Integration Cards -->
       <div class="cloud-grid">
 
-        <!-- Puter -->
+        <!-- Grudge Account (Puter identity) -->
         <div class="int-card" id="int-puter">
           <div class="int-head">
-            <div class="int-icon">🌐</div>
-            <div class="int-name">Puter Cloud</div>
-            <div class="int-badge" id="puter-badge">Not connected</div>
+            <img src="/gruda-king.png" alt="" class="gruda-ico" style="width:1.4rem;height:1.4rem;border-radius:4px">
+            <div class="int-name">Grudge Account</div>
+            <div class="int-badge" id="puter-badge">Not signed in</div>
           </div>
-          <div class="int-desc">Your personal cloud computer. Store files, deploy apps, and run AI — all on Puter.com. Free tier available.</div>
+          <div class="int-desc">Sign in with your Grudge account to sync identity, saves, and deploys across Grudge Studio. Powered by Puter (user-pays) - your data stays yours.</div>
           <div id="puter-user" class="int-user" style="display:none"></div>
           <div id="puter-connect-row">
-            <button class="int-btn primary" onclick="puterSignIn()">Sign in with Puter</button>
+            <button class="int-btn primary" onclick="puterSignIn()"><img src="/gruda-king.png" alt="" class="gruda-ico" style="height:1em;width:1em;vertical-align:-0.15em"> Sign in with Grudge</button>
           </div>
-          <div id="puter-actions" style="display:none;display:flex;flex-direction:column;gap:6px;">
-            <button class="int-btn" onclick="puterUploadProject()">⬆ Upload project to Puter</button>
-            <button class="int-btn danger" onclick="puterSignOut()">Disconnect</button>
+          <div id="puter-actions" style="display:none;flex-direction:column;gap:6px;">
+            <button class="int-btn" onclick="puterUploadProject()">Upload project to cloud</button>
+            <button class="int-btn danger" onclick="puterSignOut()">Sign out</button>
           </div>
         </div>
 
@@ -690,7 +767,7 @@ async function initSplash() {
     const gEl = document.getElementById("splash-gifs");
     if (splash.gif1) { const i=document.createElement("img");i.src=splash.gif1;gEl.appendChild(i); }
     if (splash.gif2) { const i=document.createElement("img");i.src=splash.gif2;gEl.appendChild(i); }
-    if (!splash.gif1&&!splash.gif2) gEl.innerHTML=`<div style="font-size:5rem;filter:drop-shadow(0 0 20px rgba(255,107,0,.5))">⚔️</div>`;
+    if (!splash.gif1&&!splash.gif2) gEl.innerHTML=`<img src="/gruda-king.png" alt="GRUDA Agent" class="splash-logo">`;
   } catch {}
   try {
     const h = await fetch("/api/history").then(r=>r.json());
@@ -805,6 +882,7 @@ async function initApp() {
     window.voiceId = c.voiceId || "";
     if (c.displayName) displayName = c.displayName;
   } catch(e){}
+  try { GrudgeAuth.restore(); } catch(e){}
   setInterval(checkHealth,15000);
 }
 
@@ -957,14 +1035,15 @@ function initWS() {
 
 /* ── TABS ── */
 function showTab(tab) {
-  ["ai","treaty","ide","assets","cloud"].forEach(t=>{
-    document.getElementById("panel-"+t).classList.toggle("active",t===tab);
-    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+  ["ai","treaty","ide","env","assets","cloud"].forEach(t=>{
+    document.getElementById("panel-"+t)?.classList.toggle("active",t===tab);
+    document.getElementById("tab-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("nav-"+t)?.classList.toggle("active",t===tab);
   });
   if(tab==="cloud")  loadIntegrations();
   if(tab==="ide")    { initMonaco(); refreshTree(); }
   if(tab==="assets") loadAssets();
+  if(tab==="env")    initEnv();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1003,13 +1082,14 @@ async function refreshTree() {
 
 function renderTree(nodes, container, prefix) {
   container.innerHTML='';
-  nodes.forEach(n=>{
+  (nodes||[]).forEach(n=>{
+    const isDir = n.type==='dir' || n.isDir;
     const el=document.createElement('div');
-    el.className = 'ft-item'+(n.type==='dir'?' ft-dir':'');
+    el.className = 'ft-item'+(isDir?' ft-dir':'');
     el.style.paddingLeft=(prefix?prefix.split('/').length*10:0)+'px';
-    el.textContent=(n.type==='dir'?'📁 ':'📄 ')+n.name;
-    if(n.type==='file'){
-      el.onclick=()=>openFile(prefix+'/'+n.name);
+    el.textContent=(isDir?'📁 ':'📄 ')+n.name;
+    if(!isDir){
+      el.onclick=()=>openFile(n.path);
     } else {
       let expanded=false;
       el.onclick=()=>{
@@ -1044,7 +1124,7 @@ async function openFile(path) {
     const t=document.createElement('div');
     t.className='ide-tab';
     t.id=tabId;
-    const name=path.split('/').pop();
+    const name=path.split(/[\\/]/).pop();
     t.innerHTML=`<span onclick="switchTabById('${tabId}','${path.replace(/'/g,"\\'")}')">${name}</span>`+
                 `<span onclick="closeTab('${path.replace(/'/g,"\\'")}')" style="margin-left:6px;opacity:.5;cursor:pointer">✕</span>`;
     tabs.appendChild(t);
@@ -1091,15 +1171,16 @@ async function saveFile(){
 }
 
 async function runCode(){
-  if(!activeFile) return;
+  if(!activeFile||!monacoEditor) return;
   const out=document.getElementById('ide-output');
   out.innerHTML='<span class="out-sys">Running…</span>';
   await saveFile();
   const res=await fetch('/api/ide/run',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({path:activeFile})});
+    body:JSON.stringify({code:monacoEditor.getValue(), lang:document.getElementById('ide-lang')?.textContent||'javascript'})});
   const data=await res.json();
-  const safeOut=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const html=(data.stdout?safeOut(data.stdout):'')+(data.stderr?'<span class="out-err">'+safeOut(data.stderr)+'</span>':'');
+  const safeOut=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let html=(data.stdout?safeOut(data.stdout):'')+(data.stderr?'<span class="out-err">'+safeOut(data.stderr)+'</span>':'');
+  if(data.error) html+='<span class="out-err">'+safeOut(data.error)+'</span>';
   out.innerHTML=html||'<span class="out-sys">// No output</span>';
 }
 
@@ -1109,13 +1190,14 @@ async function generateSnippet(){
   const context=monacoEditor.getModel()?.getValueInRange(sel)||monacoEditor.getValue().slice(0,1000);
   document.getElementById('ide-status').textContent='Generating snippet…';
   const res=await fetch('/api/ide/snippet',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({context, language:document.getElementById('ide-lang').textContent})});
+    body:JSON.stringify({prompt:context, lang:document.getElementById('ide-lang').textContent, model:currentModel})});
   const data=await res.json();
-  if(data.snippet){
+  const snippet=data.code||data.snippet;
+  if(snippet){
     const pos=monacoEditor.getPosition();
     monacoEditor.executeEdits('',[{
       range:new monaco.Range(pos.lineNumber,pos.column,pos.lineNumber,pos.column),
-      text:'\n'+data.snippet
+      text:'\n'+snippet
     }]);
     document.getElementById('ide-status').textContent='Snippet inserted ✓';
   } else {
@@ -1134,7 +1216,7 @@ function setAssetSource(src){
     document.getElementById('asrc-'+s)?.classList.toggle('active',s===src);
   });
   const typeSelect=document.getElementById('asset-type');
-  if(typeSelect) typeSelect.style.display=(src==='polyhaven')?'':'none';
+  if(typeSelect) typeSelect.style.display=(src==='polyhaven'||src==='grudge')?'':'none';
   loadAssets();
 }
 
@@ -1177,8 +1259,12 @@ async function loadAssets(){
     renderAssets(grid, data.assets||[], renderPolyPizzaCard);
 
   } else {
-    const res=await fetch('/api/assets/grudge?q='+encodeURIComponent(q));
+    const params=new URLSearchParams();
+    if(q) params.set('q',q);
+    if(type&&type!=='all') params.set('category',type);
+    const res=await fetch('/api/assets/r2?'+params);
     const data=await res.json();
+    if(!(data.assets&&data.assets.length)&&data.note){ grid.innerHTML='<div class="asset-loading">'+data.note+'</div>'; return; }
     renderAssets(grid, data.assets||[], renderGrudgeCard);
   }
 }
@@ -1226,11 +1312,13 @@ function renderPolyPizzaCard(a){
 function renderGrudgeCard(a){
   const card=document.createElement('div');
   card.className='asset-card';
+  const k=(a.r2Key||'').replace(/'/g,"\\'");
+  const useEnv=a.r2Key?`<button class="asset-dl-btn" style="margin-left:4px" onclick="envUseAsset('${k}')">▶ Env</button>`:'';
   card.innerHTML=`<img src="${a.thumbnail||''}" onerror="this.style.display='none'" loading="lazy">
     <div class="asset-card-info">
       <div class="asset-card-name">${a.name}</div>
-      <div class="asset-card-type">${a.category||'asset'}</div>
-      ${a.url?`<a href="${a.url}" target="_blank" class="asset-dl-btn">⬇ Use</a>`:''}
+      <div class="asset-card-type">${a.type||a.category||'asset'}</div>
+      ${a.url?`<a href="${a.url}" target="_blank" class="asset-dl-btn">⬇ Use</a>`:''}${useEnv}
     </div>`;
   return card;
 }
@@ -1247,6 +1335,311 @@ async function downloadPolyHaven(slug){
 
 // Restore Poly Pizza key if saved
 try{ const k=localStorage.getItem('gruda_pp_key'); if(k) _ppKey=k; }catch(e){}
+
+/* ══════════════════════════════════════════════════════════
+   ENVIRONMENT — agentic Three.js / Rapier / Phaser / Node studio
+   Sandboxed <iframe> runtime via ESM importmap (no build step).
+   Plugin contract: registerPlugin({ id, name, setup, update, dispose })
+══════════════════════════════════════════════════════════ */
+let envEditor=null, envEngine='three', envEditorReady=false, _envBridge=false;
+
+const ENV_ENGINE_LABEL={three:'three.js',rapier:'three.js + rapier',phaser:'phaser',node:'node (server)'};
+
+const ENV_TEMPLATES = {
+  three:
+`import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b12);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(4, 3, 6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 0.8));
+const dir = new THREE.DirectionalLight(0xffffff, 1.2); dir.position.set(5, 8, 5); scene.add(dir);
+scene.add(new THREE.GridHelper(20, 20, 0x335588, 0x223344));
+
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(1.5, 1.5, 1.5),
+  new THREE.MeshStandardMaterial({ color:0xff6b00, roughness:0.4, metalness:0.1 })
+);
+scene.add(cube);
+
+// Plugin example (see Environment coding rules): a self-contained behavior.
+registerPlugin({ id:'spin', name:'Spin', update:(dt)=>{ cube.rotation.y += dt*0.6; cube.rotation.x += dt*0.2; } });
+
+const ctx = { THREE, scene, camera, renderer, assetUrl, clock:new THREE.Clock() };
+GRUDA.boot(ctx, () => { controls.update(); });   // boot runs plugins + the render loop
+addEventListener('resize', () => { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+`,
+  rapier:
+`import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import RAPIER from '@dimforge/rapier3d-compat';
+
+await RAPIER.init();                       // WASM physics must init before use
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0b12);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(7, 7, 11);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 0.9));
+const dir = new THREE.DirectionalLight(0xffffff, 1.1); dir.position.set(6, 10, 6); scene.add(dir);
+
+const world = new RAPIER.World({ x:0, y:-9.81, z:0 });
+const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 20), new THREE.MeshStandardMaterial({ color:0x223344 }));
+floor.position.y = -0.5; scene.add(floor);
+world.createCollider(RAPIER.ColliderDesc.cuboid(10, 0.5, 10), world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0)));
+
+const bodies = [];
+for (let i = 0; i < 14; i++) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({ color:new THREE.Color().setHSL(Math.random(), 0.6, 0.5) }));
+  scene.add(m);
+  const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation((Math.random()-0.5)*4, 5 + i*1.1, (Math.random()-0.5)*4));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5), rb);
+  bodies.push([m, rb]);
+}
+
+const ctx = { THREE, RAPIER, world, scene, camera, renderer, assetUrl, clock:new THREE.Clock() };
+GRUDA.boot(ctx, () => {
+  world.step();                            // fixed 60Hz step (Rapier default)
+  for (const [m, rb] of bodies) { const t = rb.translation(), r = rb.rotation(); m.position.set(t.x, t.y, t.z); m.quaternion.set(r.x, r.y, r.z, r.w); }
+  controls.update();
+});
+addEventListener('resize', () => { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+`,
+  phaser:
+`import Phaser from 'phaser';
+
+class Main extends Phaser.Scene {
+  create() {
+    this.add.text(20, 20, 'GRUDA Phaser scene', { color:'#ff9500', fontFamily:'monospace', fontSize:'18px' });
+    this.box = this.add.rectangle(innerWidth/2, innerHeight/2, 90, 90, 0xff6b00);
+    this.input.on('pointermove', (p) => { this.box.x = p.x; this.box.y = p.y; });
+  }
+  update(_, dt) { this.box.angle += dt * 0.12; }
+}
+
+new Phaser.Game({ type: Phaser.AUTO, backgroundColor:'#0b0b12', scene: Main,
+  scale: { mode: Phaser.Scale.RESIZE, width: innerWidth, height: innerHeight } });
+`,
+  node:
+`// Runs on the GRUDA server (Railway/local) via /api/ide/run.
+// The browser engines (three / rapier / phaser) run in the preview iframe instead.
+console.log('GRUDA Node scene');
+const n = 8; let total = 0;
+for (let i = 1; i <= n; i++) { total += i; console.log('tick', i); }
+console.log('sum 1..' + n + ' = ' + total);
+`
+};
+
+function ENV_SYS(engine){
+  const base="You are the GRUDA Environment Worker. Return ONLY runnable code with NO markdown fences and NO prose. Load Grudge assets via the global assetUrl('/models/...') helper (resolves to the R2 CDN). Always clean up on teardown.";
+  if(engine==='rapier') return base+" ES module using bare imports 'three', 'three/addons/...', '@dimforge/rapier3d-compat'. await RAPIER.init(); step the world each frame; sync meshes from rigid bodies. You may use the global GRUDA.boot(ctx, onFrame) helper and registerPlugin().";
+  if(engine==='phaser') return base+" ES module using a bare import of 'phaser'. Create a Phaser.Game with a Scene (create/update), canvas sized to the window.";
+  if(engine==='node')   return base+" A self-contained Node.js script that logs to stdout. No DOM APIs.";
+  return base+" ES module using bare imports 'three' and 'three/addons/...'. Set up renderer, scene, PerspectiveCamera, OrbitControls, lights and use the global GRUDA.boot(ctx, onFrame) loop + registerPlugin(). Handle resize.";
+}
+function envStrip(s){ return String(s||'').replace(/^\s*```[a-z]*\n?/i,'').replace(/```\s*$/i,'').trim(); }
+function envStatus(t){ const el=document.getElementById('env-status'); if(el) el.textContent=t||''; }
+
+function initEnv(){
+  envSetupBridge();
+  envRefreshScenes();
+  if(envEditorReady) return;
+  envEditorReady=true;
+  const make=()=>{
+    envEditor = monaco.editor.create(document.getElementById('env-editor'), {
+      value: ENV_TEMPLATES[envEngine], language:'javascript', theme:'vs-dark',
+      fontSize:13, minimap:{enabled:false}, automaticLayout:true, scrollBeyondLastLine:false, tabSize:2, wordWrap:'on'
+    });
+    envEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, ()=>envSave());
+    document.getElementById('env-engine-label').textContent=ENV_ENGINE_LABEL[envEngine];
+  };
+  if(window.monaco && monaco.editor){ make(); }
+  else { require.config({ paths:{ vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }}); require(['vs/editor/editor.main'], make); }
+}
+
+function envOnEngine(){
+  envEngine=document.getElementById('env-engine').value;
+  document.getElementById('env-engine-label').textContent=ENV_ENGINE_LABEL[envEngine]||envEngine;
+  if(envEditor){
+    const v=envEditor.getValue().trim();
+    const isTemplate = v==='' || Object.values(ENV_TEMPLATES).some(t=>t.trim()===v);
+    if(isTemplate) envEditor.setValue(ENV_TEMPLATES[envEngine]);
+  }
+}
+function envInsertTemplate(){ if(envEditor) envEditor.setValue(ENV_TEMPLATES[envEngine]); envStatus('Loaded '+envEngine+' template'); }
+
+// Build the sandboxed iframe document: importmap + preamble (assetUrl, plugin
+// registry, GRUDA.boot loop, error/console bridge) + the user scene module.
+function envBuildDoc(engine, code){
+  const base = location.origin + '/api/r2';
+  const importmap = { imports: {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "@dimforge/rapier3d-compat": "https://esm.sh/@dimforge/rapier3d-compat@0.12.0",
+    "phaser": "https://esm.sh/phaser@3.80.1"
+  }};
+  return `<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0b0b12;color:#cfcfe0;font-family:monospace}</style>
+<script type="importmap">${JSON.stringify(importmap)}<\/script>
+<script>
+(function(){
+  var BASE=${JSON.stringify(base)};
+  window.assetUrl=function(p){ p=String(p||''); return /^https?:/.test(p)?p:(BASE+(p.charAt(0)==='/'?p:'/'+p)); };
+  function send(level,msg){ try{ parent.postMessage({__env:'msg',level:level,msg:String(msg)},'*'); }catch(_){} }
+  window.onerror=function(m,s,l,c,e){ send('e',(e&&e.stack)||m); };
+  window.addEventListener('unhandledrejection',function(ev){ send('e',(ev.reason&&ev.reason.stack)||ev.reason); });
+  var _l=console.log, _e=console.error;
+  console.log=function(){ send('l',[].join.call(arguments,' ')); _l.apply(console,arguments); };
+  console.error=function(){ send('e',[].join.call(arguments,' ')); _e.apply(console,arguments); };
+  var plugins=[], raf=0, last=0;
+  function boot(ctx,onFrame){
+    window.GRUDA.ctx=ctx;
+    plugins.forEach(function(p){ try{ p.setup&&p.setup(ctx); }catch(e){ send('e',(e&&e.stack)||e); } });
+    (function loop(){
+      raf=requestAnimationFrame(loop);
+      var dt=(ctx.clock&&ctx.clock.getDelta)?ctx.clock.getDelta():((function(){var n=performance.now();var d=(n-(last||n))/1000;last=n;return d;})());
+      try{ onFrame&&onFrame(dt); }catch(e){ send('e',(e&&e.stack)||e); }
+      plugins.forEach(function(p){ try{ p.update&&p.update(dt,ctx); }catch(e){ send('e',(e&&e.stack)||e); } });
+      try{ if(ctx.composer) ctx.composer.render(dt); else if(ctx.renderer&&ctx.scene&&ctx.camera) ctx.renderer.render(ctx.scene,ctx.camera); }catch(e){ send('e',(e&&e.stack)||e); }
+    })();
+  }
+  function stop(){ cancelAnimationFrame(raf); plugins.forEach(function(p){ try{ p.dispose&&p.dispose(); }catch(e){} }); }
+  window.GRUDA={ plugins:plugins, registerPlugin:function(p){ plugins.push(p); }, boot:boot, stop:stop, ctx:null };
+  window.registerPlugin=window.GRUDA.registerPlugin;
+  window.addEventListener('message',function(e){ if(e.data&&e.data.__env==='stop') stop(); });
+})();
+<\/script>
+</head><body>
+<script type="module">
+${code}
+<\/script>
+</body></html>`;
+}
+
+function envSetupBridge(){
+  if(_envBridge) return; _envBridge=true;
+  window.addEventListener('message', (e)=>{
+    const d=e.data; if(!d || d.__env!=='msg') return;
+    const cons=document.getElementById('env-console'); if(!cons) return;
+    if(d.level==='e') cons.classList.add('show');
+    if(d.level!=='e' && !cons.classList.contains('show')) return;
+    const span=document.createElement('span');
+    if(d.level==='e') span.className='e';
+    span.textContent=(d.msg||'')+'\n';
+    cons.appendChild(span); cons.scrollTop=cons.scrollHeight;
+  });
+}
+
+function envPlay(){
+  if(!envEditor) return;
+  const code=envEditor.getValue();
+  const frame=document.getElementById('env-frame');
+  const cons=document.getElementById('env-console');
+  cons.innerHTML=''; cons.classList.remove('show');
+  if(envEngine==='node'){
+    frame.style.display='none'; cons.classList.add('show'); cons.textContent='Running on server…';
+    fetch('/api/ide/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code, lang:'javascript'})})
+      .then(r=>r.json()).then(d=>{
+        cons.innerHTML='';
+        if(d.error){ const s=document.createElement('span'); s.className='e'; s.textContent=d.error; cons.appendChild(s); }
+        if(d.stdout) cons.appendChild(document.createTextNode(d.stdout));
+        if(d.stderr){ const s=document.createElement('span'); s.className='e'; s.textContent=d.stderr; cons.appendChild(s); }
+        if(!d.error&&!d.stdout&&!d.stderr) cons.textContent='(no output)';
+      }).catch(e=>{ cons.innerHTML='<span class="e">'+esc(e.message)+'</span>'; });
+    envStatus('Ran Node scene'); return;
+  }
+  frame.style.display='';
+  frame.srcdoc = envBuildDoc(envEngine, code);
+  envStatus('Playing — '+ENV_ENGINE_LABEL[envEngine]);
+}
+
+function envStop(){
+  const frame=document.getElementById('env-frame');
+  try{ frame.contentWindow && frame.contentWindow.postMessage({__env:'stop'},'*'); }catch(e){}
+  frame.srcdoc=''; frame.style.display='';
+  const cons=document.getElementById('env-console'); cons.innerHTML=''; cons.classList.remove('show');
+  envStatus('Stopped');
+}
+
+function envFullscreen(){
+  const el=document.getElementById('env-frame');
+  if(el && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+}
+
+async function envGenerate(){
+  const p=window.prompt('Describe the '+envEngine+' scene to generate:');
+  if(!p) return;
+  envStatus('Generating…');
+  try{
+    let code='';
+    if(isPuterModel(currentModel) && typeof puter!=='undefined' && puter.ai){
+      const resp=await puter.ai.chat([{role:'system',content:ENV_SYS(envEngine)},{role:'user',content:p}],{ model: currentModel.slice(6) });
+      code=envStrip((resp&&(resp.message&&resp.message.content||resp.text))||String(resp||''));
+    } else {
+      const d=await fetch('/api/env/scene',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:p, engine:envEngine, model:currentModel})}).then(r=>r.json());
+      if(d.error){ envStatus(d.error); return; }
+      code=d.code||'';
+    }
+    if(code && envEditor){ envEditor.setValue(code); envStatus('Generated ✓ — press Play'); }
+    else envStatus('No code returned');
+  }catch(e){ envStatus('Generate failed: '+e.message); }
+}
+
+function envProject(){ return (window._activeProject) || (activeProj&&activeProj.name) || ''; }
+async function envSave(){
+  if(!envEditor) return;
+  const name=window.prompt('Save scene as:'); if(!name) return;
+  await fetch('/api/env/scenes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:envProject(), name, engine:envEngine, code:envEditor.getValue()})});
+  envStatus('Saved \"'+name+'\"'); envRefreshScenes();
+}
+async function envRefreshScenes(){
+  const sel=document.getElementById('env-scene-list'); if(!sel) return;
+  try{
+    const d=await fetch('/api/env/scenes?project='+encodeURIComponent(envProject())).then(r=>r.json());
+    const scenes=d.scenes||[];
+    if(!scenes.length){ sel.style.display='none'; return; }
+    sel.style.display='';
+    sel.innerHTML='<option value="">Load scene…</option>'+scenes.map(s=>`<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.engine)})</option>`).join('');
+  }catch(e){ sel.style.display='none'; }
+}
+async function envLoadSelected(id){
+  if(!id) return;
+  const d=await fetch('/api/env/scenes/'+encodeURIComponent(id)+'?project='+encodeURIComponent(envProject())).then(r=>r.json());
+  if(d && d.code && envEditor){
+    envEngine=d.engine||'three'; document.getElementById('env-engine').value=envEngine;
+    document.getElementById('env-engine-label').textContent=ENV_ENGINE_LABEL[envEngine]||envEngine;
+    envEditor.setValue(d.code); envStatus('Loaded \"'+(d.name||id)+'\"');
+  }
+}
+
+// Called from the Assets tab "▶ Env" button: drop an R2 model into the scene.
+function envUseAsset(key){
+  showTab('env');
+  setTimeout(()=>{
+    if(envEngine==='phaser'||envEngine==='node'){ document.getElementById('env-engine').value='three'; envOnEngine(); }
+    if(!envEditor) return;
+    const isFbx=/\.fbx$/i.test(key);
+    const imp=isFbx ? "import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';"
+                    : "import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';";
+    const call=isFbx ? "new FBXLoader().load(assetUrl('"+key+"'), (o)=>scene.add(o));"
+                     : "new GLTFLoader().load(assetUrl('"+key+"'), (g)=>scene.add(g.scene));";
+    envEditor.setValue(imp+'\n'+envEditor.getValue()+'\n\n// R2 asset: '+key+'\n'+call+'\n');
+    envStatus('Inserted loader for '+key);
+  }, 220);
+}
 
 /* ── MODE ── */
 function setMode(m) {
@@ -1404,7 +1797,7 @@ function appendMsg(role, content){
   const msg=document.createElement("div"); msg.className="msg "+(role==="user"?"user-msg":"agent-msg");
   const head=document.createElement("div"); head.className="msg-head";
   const who = role==="user" ? (displayName||"You") : (window.aiName||"GRUDA");
-  head.innerHTML=`<div class="avatar ${role==="user"?"user":"agent"}">${role==="user"?esc(who.slice(0,1).toUpperCase()):"⚔"}</div><div class="msg-name">${esc(who)}</div>`;
+  head.innerHTML=`<div class="avatar ${role==="user"?"user":"agent"}">${role==="user"?esc(who.slice(0,1).toUpperCase()):'<img src="/gruda-king.png" alt="GRUDA" class="avatar-img">'}</div><div class="msg-name">${esc(who)}</div>`;
   const body=document.createElement("div"); body.className="msg-body";
   if(role==="user") body.textContent=content; else body.innerHTML=mdToHtml(content);
   msg.appendChild(head); msg.appendChild(body); wrap.appendChild(msg);
@@ -1420,6 +1813,250 @@ async function speak(text){
     if(r.ok){ const buf=await r.arrayBuffer(); const a=new Audio(URL.createObjectURL(new Blob([buf],{type:"audio/mpeg"}))); a.play(); return; }
   }catch(e){}
   try{ const u=new SpeechSynthesisUtterance(text); speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){}
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GRUDGE LOGIN — Puter identity, scoped to a Grudge ID
+   · Honors an existing session/token (Puter session, or ?grudge_token= handed
+     off from another Grudge site) without re-prompting.
+   · Otherwise offers Puter sign-in and links the Puter ID → Grudge ID.
+   Grudge-branded UI; storage is server-side config (never localStorage).
+═══════════════════════════════════════════════════════════ */
+const GrudgeAuth = {
+  user: null,                 // { puterUuid, username, grudgeId }
+  cfg: { authUrl:"https://id.grudge-studio.com", accountUrl:"", linkEnabled:false },
+  ready(){ return typeof puter!=="undefined" && puter && puter.auth; },
+  async loadCfg(){ try { this.cfg = { ...this.cfg, ...(await fetch("/api/auth/config").then(r=>r.json())) }; } catch(e){} },
+
+  // Use any existing session/token first; never prompt here.
+  async restore(){
+    await this.loadCfg();
+    // 1) Token handed off from another Grudge property
+    try {
+      const u = new URL(location.href);
+      const tok = u.searchParams.get("grudge_token") || u.searchParams.get("puter_token") || u.searchParams.get("token");
+      if (tok) {
+        try { if (puter && puter.setAuthToken) puter.setAuthToken(tok); else if (window.localStorage) localStorage.setItem("puter.auth.token", tok); } catch(e){}
+        ["grudge_token","puter_token","token"].forEach(k=>u.searchParams.delete(k));
+        history.replaceState(null,"",u.toString());
+      }
+    } catch(e){}
+    // 2) Existing Puter session
+    if (this.ready()) {
+      try {
+        if (puter.auth.isSignedIn && puter.auth.isSignedIn()) {
+          const pu = await puter.auth.getUser();
+          await this.link(pu, true); this.updateUI(); return this.user;
+        }
+      } catch(e){}
+    }
+    // 3) Previously linked identity from server config
+    try {
+      const c = await fetch("/api/config").then(r=>r.json());
+      if (c && c.grudgeId) this.user = { grudgeId:c.grudgeId, username:c.puterUsername||"", puterUuid:c.puterUuid||"" };
+    } catch(e){}
+    this.updateUI(); return this.user;
+  },
+
+  // Offer Puter auth (must be from a click) then link to a Grudge ID.
+  async signIn(){
+    if (!this.ready()) { alert("Sign-in needs an internet connection (Puter SDK not loaded)."); return; }
+    try {
+      if (!(puter.auth.isSignedIn && puter.auth.isSignedIn())) await puter.auth.signIn();
+      const pu = await puter.auth.getUser();
+      await this.link(pu, true); this.updateUI();
+    } catch(e){ this.setBadge("Sign-in failed", false); }
+  },
+  async signOut(){
+    try { if (this.ready()) await puter.auth.signOut(); } catch(e){}
+    this.user = null;
+    try { fetch("/api/config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({grudgeId:null,puterUuid:null,puterUsername:null})}); } catch(e){}
+    this.updateUI();
+  },
+
+  // Every Puter ID maps to a Grudge ID (one-way). Prefer backend link; else guest ID.
+  async link(pu, persist){
+    const uuid = (pu && (pu.uuid || pu.id)) || "";
+    const username = (pu && (pu.username || pu.email)) || "player";
+    let grudgeId = null;
+    if (this.cfg.linkEnabled && this.cfg.accountUrl) {
+      try {
+        const tok = (this.ready() && puter.authToken) || "";
+        const r = await fetch(this.cfg.accountUrl.replace(/\/$/,"") + "/link/puter", {
+          method:"POST", headers:{ "Content-Type":"application/json", ...(tok?{Authorization:"Bearer "+tok}:{}) },
+          body: JSON.stringify({ puterUuid: uuid, username })
+        });
+        if (r.ok) { const d = await r.json(); grudgeId = d.grudgeId || d.id || null; }
+      } catch(e){}
+    }
+    if (!grudgeId) grudgeId = this.guestId(uuid || username);
+    this.user = { puterUuid: uuid, username, grudgeId };
+    if (persist) { try { fetch("/api/config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ grudgeId, puterUuid: uuid, puterUsername: username, displayName: (typeof displayName!=="undefined" && displayName) || username })}); } catch(e){} }
+    return this.user;
+  },
+  guestId(seed){
+    let h = 0; const s = String(seed||"") + "grudge";
+    for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+    return "GRUDA-" + h.toString(36).toUpperCase().padStart(8,"0").slice(0,8);
+  },
+
+  setBadge(text, on){ const b=document.getElementById("puter-badge"); if(b){ b.textContent=text; b.classList.toggle("on",!!on); } },
+  updateUI(){
+    const inn = !!(this.user && this.user.grudgeId);
+    this.setBadge(inn ? "Signed in" : "Not signed in", inn);
+    const connect=document.getElementById("puter-connect-row");
+    const actions=document.getElementById("puter-actions");
+    const userEl=document.getElementById("puter-user");
+    if (connect) connect.style.display = inn ? "none" : "";
+    if (actions) actions.style.display = inn ? "flex" : "none";
+    if (userEl) {
+      if (inn) { userEl.style.display="block"; userEl.innerHTML = `<strong style="color:var(--gold)">${esc(this.user.username||"Grudge Warlord")}</strong><br><span style="font-size:.7rem;color:var(--muted)">Grudge ID: ${esc(this.user.grudgeId)}</span>`; }
+      else userEl.style.display="none";
+    }
+    const chip=document.getElementById("login-chip");
+    if (chip) {
+      chip.innerHTML = inn
+        ? `<img src="/gruda-king.png" class="gruda-ico" alt=""> <span class="gid" title="Grudge ID: ${esc(this.user.grudgeId)}">${esc(this.user.username||"Signed in")}</span>`
+        : `<button class="login-btn" onclick="GrudgeAuth.signIn()"><img src="/gruda-king.png" class="gruda-ico" alt=""> Sign in</button>`;
+    }
+  },
+};
+function puterSignIn(){ return GrudgeAuth.signIn(); }
+function puterSignOut(){ return GrudgeAuth.signOut(); }
+function puterUploadProject(){ alert("Cloud project upload is coming soon."); }
+// Cloud & Deploy tab opener: refresh the login card + saved integration badges.
+function loadIntegrations(){ try { GrudgeAuth.updateUI(); refreshIntegrationsUI(); } catch(e){} }
+
+/* ══════════════════════════════════════════════════════════
+   CORE HANDLERS — previously referenced by the markup but never
+   defined (dead buttons). Defined here so every control works.
+══════════════════════════════════════════════════════════ */
+
+/* New Chat — clear the conversation and return to the AI tab. */
+function newChat(){
+  messages=[]; lastResp=""; isStreaming=false;
+  try{ setSend(false); }catch(e){}
+  const m=document.getElementById("msgs");
+  if(m) m.innerHTML=`<div id="welcome"><div class="wi"><img src="/gruda-king.png" alt="GRUDA Agent" class="brand-logo"></div><h2>GRUDA Agent is ready</h2><p>Grok Build–aligned workspace: <strong style="color:var(--accent)">Agent mode</strong> runs tools (files, web, shell, memory).<br>Use <code>/design</code> <code>/implement</code> or <code>grudge-studio</code> for skills.<br><strong style="color:var(--blue)">Chat mode</strong> streams via Puter — fast and conversational.</p></div>`;
+  showTab("ai");
+  document.getElementById("input-box")?.focus();
+}
+
+/* New Project — open the modal, then create via POST /api/projects. */
+function openNewProj(){
+  const mb=document.getElementById("new-proj-modal"); if(!mb) return;
+  mb.classList.add("open");
+  const i=document.getElementById("new-proj-name");
+  if(i){ i.value=""; setTimeout(()=>i.focus(),50); }
+}
+async function createProj(){
+  const inp=document.getElementById("new-proj-name");
+  const name=((inp&&inp.value)||"").trim();
+  if(!name) return;
+  try{
+    const d=await fetch("/api/projects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})}).then(r=>r.json());
+    document.getElementById("new-proj-modal")?.classList.remove("open");
+    await loadProjects();
+    if(d&&d.name) await selectProj({name:d.name, path:d.path||""});
+  }catch(e){ alert("Could not create project: "+e.message); }
+}
+
+/* ── CLOUD & DEPLOY — honest, non-throwing handlers. ──
+   Token providers persist their token to server config (preserving other
+   integrations) for when the deploy bridge is wired; action buttons report
+   status instead of failing silently. */
+function cloudLog(msg){
+  const el=document.getElementById("deploy-log");
+  if(el){ el.textContent=new Date().toLocaleTimeString()+"  "+msg+"\n"+el.textContent; }
+  else alert(msg);
+}
+async function saveIntegration(name, value){
+  try{
+    const cur=await fetch("/api/config").then(r=>r.json()).catch(()=>({}));
+    const integrations={ ...((cur&&cur.integrations)||{}) };
+    if(value==null) delete integrations[name]; else integrations[name]=value;
+    await fetch("/api/config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({integrations})});
+  }catch(e){}
+}
+function setIntBadge(id, text, on){ const b=document.getElementById(id); if(b){ b.textContent=text; b.classList.toggle("on",!!on); } }
+function showIntActions(prefix, on){
+  const c=document.getElementById(prefix+"-connect-row"); const a=document.getElementById(prefix+"-actions");
+  if(c) c.style.display=on?"none":"";
+  if(a) a.style.display=on?"flex":"none";
+}
+/* Google Drive */
+function googleConnect(){
+  const id=(document.getElementById("google-clientid")?.value||"").trim();
+  if(!id){ cloudLog("Enter a Google OAuth Client ID to connect Drive."); return; }
+  saveIntegration("google",{ clientId:id });
+  setIntBadge("google-badge","Saved",true); showIntActions("google",true);
+  cloudLog("Google client ID saved. Drive sync runs from a local GRUDA Agent (browser OAuth bridge not enabled in this build).");
+}
+function googleDisconnect(){ saveIntegration("google",null); setIntBadge("google-badge","Not connected",false); showIntActions("google",false); }
+function driveUploadProject(){ cloudLog("Drive upload needs the server-side Drive bridge (not enabled in this build)."); }
+/* GitHub */
+function githubConnect(){
+  const tok=(document.getElementById("github-token")?.value||"").trim();
+  if(!tok){ cloudLog("Paste a GitHub token (repo scope) to connect."); return; }
+  saveIntegration("github",{ token:tok });
+  setIntBadge("github-badge","Token saved",true); showIntActions("github",true);
+  cloudLog("GitHub token saved. Push runs from a local GRUDA Agent with git installed.");
+}
+function githubDisconnect(){ saveIntegration("github",null); setIntBadge("github-badge","Not connected",false); showIntActions("github",false); }
+function githubPushProject(){
+  if(!activeProj){ cloudLog("Select a project first."); return; }
+  cloudLog("Push queued for "+activeProj.name+". Full GitHub push runs from a local GRUDA Agent.");
+}
+/* Vercel */
+function vercelConnect(){
+  const tok=(document.getElementById("vercel-token")?.value||"").trim();
+  if(!tok){ cloudLog("Paste a Vercel token to connect."); return; }
+  saveIntegration("vercel",{ token:tok });
+  setIntBadge("vercel-badge","Token saved",true); showIntActions("vercel",true);
+  cloudLog("Vercel token saved. Deploy runs from a local GRUDA Agent.");
+}
+function vercelDisconnect(){ saveIntegration("vercel",null); setIntBadge("vercel-badge","Not connected",false); showIntActions("vercel",false); }
+function vercelDeployProject(){
+  if(!activeProj){ cloudLog("Select a project first."); return; }
+  cloudLog("Deploy queued for "+activeProj.name+". Full Vercel deploy runs from a local GRUDA Agent.");
+}
+/* Quick-deploy cards */
+function deployTo(target){
+  showTab("cloud");
+  if(target==="puter"){ (GrudgeAuth&&GrudgeAuth.user)?puterUploadProject():puterSignIn(); return; }
+  cloudLog("Quick deploy to "+target+": open the "+target+" card above, connect a token, then deploy.");
+}
+/* Desktop launcher — generated fully client-side. */
+function downloadLauncher(osName){
+  const name=(document.getElementById("launcher-name")?.value||"").trim();
+  const dir=(document.getElementById("launcher-dir")?.value||"").trim();
+  let content, filename;
+  if(osName==="windows"){
+    const d=dir||"%USERPROFILE%\\gruda-agent";
+    content="@echo off\r\nREM GRUDA Agent launcher"+(name?(" for "+name):"")+"\r\ntitle GRUDA Agent\r\ncd /d \""+d+"\"\r\nstart \"\" http://127.0.0.1:3200\r\nnode server.js\r\npause\r\n";
+    filename="start-gruda-agent.bat";
+  } else {
+    const d=dir||"$HOME/gruda-agent";
+    content="#!/bin/sh\n# GRUDA Agent launcher"+(name?(" for "+name):"")+"\ncd \""+d+"\" || exit 1\n(command -v xdg-open >/dev/null 2>&1 && xdg-open http://127.0.0.1:3200) &\nnode server.js\n";
+    filename="start-gruda-agent.sh";
+  }
+  try{
+    const blob=new Blob([content],{type:"application/octet-stream"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    cloudLog("Generated "+filename);
+  }catch(e){ cloudLog("Could not generate launcher: "+e.message); }
+}
+/* Restore saved integration badges when the Cloud tab opens. */
+async function refreshIntegrationsUI(){
+  try{
+    const c=await fetch("/api/config").then(r=>r.json());
+    const ints=(c&&c.integrations)||{};
+    if(ints.github&&ints.github.token){ setIntBadge("github-badge","Token saved",true); showIntActions("github",true); }
+    if(ints.vercel&&ints.vercel.token){ setIntBadge("vercel-badge","Token saved",true); showIntActions("vercel",true); }
+    if(ints.google&&ints.google.clientId){ setIntBadge("google-badge","Saved",true); showIntActions("google",true); }
+  }catch(e){}
 }
 
 /* ── Puter free cloud models (key-free, user-pays) ── */
