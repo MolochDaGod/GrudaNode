@@ -682,11 +682,22 @@ app.get("/api/health", async (_req, res) => {
    IDE — Monaco code execution + file tree
    ═══════════════════════════════════════════════════════════════ */
 
+// Confine a requested path within PROJECTS_DIR (prevents arbitrary filesystem
+// access via ?dir= / ?path=). Returns the resolved absolute path, or null if it
+// would escape the projects root. ?dir=C:\... or ../ traversal resolves outside
+// the base and is rejected.
+function safeProjectPath(rel) {
+  const base = path.resolve(PROJECTS_DIR);
+  const resolved = path.resolve(base, rel || "");
+  return (resolved === base || resolved.startsWith(base + path.sep)) ? resolved : null;
+}
+
 /* ── Run code (Node.js sandbox) ──────────────────────────────── */
 app.post("/api/ide/run", (req, res) => {
   let { code, path: filePath, lang = "javascript" } = req.body;
-  if (!code && filePath && fs.existsSync(filePath)) {
-    code = fs.readFileSync(filePath, "utf8");
+  if (!code && filePath) {
+    const safe = safeProjectPath(filePath);
+    if (safe && fs.existsSync(safe)) code = fs.readFileSync(safe, "utf8");
   }
   if (!code) return res.status(400).json({ error: "code or path required" });
 
@@ -708,8 +719,8 @@ app.post("/api/ide/run", (req, res) => {
 /* ── File tree for IDE ───────────────────────────────────────── */
 app.get("/api/ide/tree", (req, res) => {
   const proj = req.query.project || req.query.proj;
-  const requested = req.query.dir || (proj ? path.join(PROJECTS_DIR, proj) : PROJECTS_DIR);
-  const dir = fs.existsSync(requested) ? requested : PROJECTS_DIR;
+  const requested = safeProjectPath(req.query.dir || proj || "") || path.resolve(PROJECTS_DIR);
+  const dir = fs.existsSync(requested) ? requested : path.resolve(PROJECTS_DIR);
   const SKIP = new Set(["node_modules",".git","dist","build",".next","__pycache__",".DS_Store"]);
   function walk(d, depth=0) {
     if (depth > 6) return [];
@@ -731,15 +742,15 @@ app.get("/api/ide/tree", (req, res) => {
 
 /* ── Read/write file for IDE ────────────────────────────────── */
 app.get("/api/ide/file", (req, res) => {
-  const p = req.query.path || req.query.p;
+  const p = safeProjectPath(req.query.path || req.query.p);
   if (!p || !fs.existsSync(p)) return res.status(404).json({ error: "not found" });
   res.json({ content: fs.readFileSync(p, "utf8"), path: p });
 });
 
 app.post("/api/ide/file", (req, res) => {
-  const p = req.body.path || req.body.p;
+  const p = safeProjectPath(req.body.path || req.body.p);
   const { content } = req.body;
-  if (!p) return res.status(400).json({ error: "path required" });
+  if (!p) return res.status(400).json({ error: "invalid or missing path" });
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, content || "", "utf8");
   res.json({ ok: true });
@@ -871,17 +882,30 @@ app.get("/api/assets/r2", async (req, res) => {
 
 // CORS-safe passthrough so the sandboxed Environment iframe can fetch GLB/FBX/
 // textures from the R2 CDN without CORS issues. Read-only, key-validated.
-app.options(/^\/api\/r2\/(.*)/, (_req, res) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.end(); });
+function r2Cors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+}
+app.options(/^\/api\/r2\/(.*)/, (_req, res) => { r2Cors(res); res.end(); });
 app.get(/^\/api\/r2\/(.*)/, async (req, res) => {
   const key = (req.params[0] || "").replace(/^\/+/, "");
   if (!key || key.includes("..")) return res.status(400).json({ error: "bad asset key" });
   try {
-    const r = await fetch(`${GRUDGE_R2_CDN}/${key}`, { signal: AbortSignal.timeout(20000) });
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const upstreamHeaders = {};
+    if (req.headers.range) upstreamHeaders.Range = req.headers.range;  // pass Range through for large GLB/FBX
+    const r = await fetch(`${GRUDGE_R2_CDN}/${key}`, { headers: upstreamHeaders, signal: AbortSignal.timeout(20000) });
+    r2Cors(res);
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
+    const cl = r.headers.get("content-length"); if (cl) res.setHeader("Content-Length", cl);
+    const cr = r.headers.get("content-range"); if (cr) res.setHeader("Content-Range", cr);
     if (!r.ok) return res.status(r.status).end();
-    res.send(Buffer.from(await r.arrayBuffer()));
+    res.status(r.status);
+    // Stream the upstream body instead of buffering the whole asset into memory
+    if (r.body) { const { Readable } = require("stream"); Readable.fromWeb(r.body).pipe(res); }
+    else res.end();
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
