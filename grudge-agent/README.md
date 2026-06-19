@@ -90,13 +90,14 @@ Works from VSCode terminal, Cursor, Warp, JetBrains, or any shell.
 
 ## Interface
 
-The app is a single-page workspace with five tabs:
+The app is a single-page workspace with six tabs:
 
 | Tab | What's inside |
 |---|---|
 | 👑 **AI Workspace** | Chat & Agent modes, model picker, voice input/TTS, per-project `gruda.md` memory |
 | 🖥️ **IDE** | Monaco code editor + project file tree, **▶ Run** (Node sandbox), and **✨ AI Snippet** code generation |
-| 🎨 **Assets** | Browse and search 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and Grudge Studio |
+| 🎮 **Environment** | Agentic **Three.js / Rapier / Phaser / Node** studio — write or AI-generate scenes, **▶ Play** in a sandboxed preview, save/load per project. See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) |
+| 🎨 **Assets** | Browse and search 3D models, textures, and HDRIs from Poly Haven, Poly Pizza, and **Grudge Studio R2** (`assets.grudge-studio.com`) |
 | 💬 **Treaty Chat** | Live community relay shared by every GRUDA Agent user |
 | ☁️ **Cloud & Deploy** | Connect Puter, Google Drive, GitHub, and Vercel — push repos and one-click deploy |
 
@@ -349,6 +350,7 @@ grudge-agent/
 - **Grudge Studio** — [grudge-studio.com](https://grudge-studio.com)
 - **GitHub** — [MolochDaGod/GrudaNode](https://github.com/MolochDaGod/GrudaNode)
 - **Project organization** — [docs/ORGANIZATION.md](docs/ORGANIZATION.md)
+- **Environment coding rules & plugins** — [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)
 - **Issues** — [GitHub Issues](https://github.com/MolochDaGod/GrudaNode/issues)
 
 ---

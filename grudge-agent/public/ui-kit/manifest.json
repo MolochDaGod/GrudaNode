@@ -1,0 +1,175 @@
+{
+  "name": "game-ui-kit-export",
+  "theme": "fantasy",
+  "targets": [
+    "html5",
+    "vanilla-js",
+    "canvas",
+    "webgl"
+  ],
+  "tokens": {
+    "--gk-font": "\"Cinzel Decorative\", \"Cinzel\", Georgia, serif",
+    "--gk-font-body": "\"EB Garamond\", Georgia, serif",
+    "--gk-font-scale": "1.1",
+    "--gk-radius": "10px",
+    "--gk-bg": "#160d0b",
+    "--gk-surface": "#241412",
+    "--gk-surface-2": "#33201c",
+    "--gk-ink": "#f3dcc4",
+    "--gk-ink-dim": "#ec9109",
+    "--gk-accent": "#f6b831",
+    "--gk-accent-2": "#e0b252",
+    "--gk-good": "#ffb02e",
+    "--gk-warn": "#c98a1a",
+    "--gk-danger": "#a8341f",
+    "--gk-mana": "#3f6fb0",
+    "--gk-xp": "#ffb02e",
+    "--gk-slot-size": "58px",
+    "--gk-glow": "0 0 0 1px rgba(255,176,46,0.22)",
+    "--gk-pixelated": "auto",
+    "--gk-btn-bg": "linear-gradient(180deg,#caa14e,#a9802f)",
+    "--gk-btn-border": "rgba(255,176,46,0.5)",
+    "--gk-fr-window-border": "3px solid var(--gk-accent)",
+    "--gk-fr-window-bg": "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(0,0,0,0.04)), var(--gk-surface)",
+    "--gk-fr-window-shadow": "0 8px 26px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(120,80,20,0.35)",
+    "--gk-fr-slot-border": "1px solid color-mix(in srgb, var(--gk-accent) 50%, transparent)",
+    "--gk-fr-slot-bg": "var(--gk-surface-2)",
+    "--gk-fr-slot-shadow": "inset 0 2px 6px rgba(0,0,0,0.4)"
+  },
+  "images": {},
+  "genre": "survival",
+  "artPreset": null,
+  "skillSet": {
+    "id": "amber",
+    "label": "Amber",
+    "count": 40,
+    "icons": [
+      "cyberpunk/skill_sets/amber/skill_01.png",
+      "cyberpunk/skill_sets/amber/skill_02.png",
+      "cyberpunk/skill_sets/amber/skill_03.png",
+      "cyberpunk/skill_sets/amber/skill_04.png",
+      "cyberpunk/skill_sets/amber/skill_05.png",
+      "cyberpunk/skill_sets/amber/skill_06.png",
+      "cyberpunk/skill_sets/amber/skill_07.png",
+      "cyberpunk/skill_sets/amber/skill_08.png",
+      "cyberpunk/skill_sets/amber/skill_09.png",
+      "cyberpunk/skill_sets/amber/skill_10.png",
+      "cyberpunk/skill_sets/amber/skill_11.png",
+      "cyberpunk/skill_sets/amber/skill_12.png",
+      "cyberpunk/skill_sets/amber/skill_13.png",
+      "cyberpunk/skill_sets/amber/skill_14.png",
+      "cyberpunk/skill_sets/amber/skill_15.png",
+      "cyberpunk/skill_sets/amber/skill_16.png",
+      "cyberpunk/skill_sets/amber/skill_17.png",
+      "cyberpunk/skill_sets/amber/skill_18.png",
+      "cyberpunk/skill_sets/amber/skill_19.png",
+      "cyberpunk/skill_sets/amber/skill_20.png",
+      "cyberpunk/skill_sets/amber/skill_21.png",
+      "cyberpunk/skill_sets/amber/skill_22.png",
+      "cyberpunk/skill_sets/amber/skill_23.png",
+      "cyberpunk/skill_sets/amber/skill_24.png",
+      "cyberpunk/skill_sets/amber/skill_25.png",
+      "cyberpunk/skill_sets/amber/skill_26.png",
+      "cyberpunk/skill_sets/amber/skill_27.png",
+      "cyberpunk/skill_sets/amber/skill_28.png",
+      "cyberpunk/skill_sets/amber/skill_29.png",
+      "cyberpunk/skill_sets/amber/skill_30.png",
+      "cyberpunk/skill_sets/amber/skill_31.png",
+      "cyberpunk/skill_sets/amber/skill_32.png",
+      "cyberpunk/skill_sets/amber/skill_33.png",
+      "cyberpunk/skill_sets/amber/skill_34.png",
+      "cyberpunk/skill_sets/amber/skill_35.png",
+      "cyberpunk/skill_sets/amber/skill_36.png",
+      "cyberpunk/skill_sets/amber/skill_37.png",
+      "cyberpunk/skill_sets/amber/skill_38.png",
+      "cyberpunk/skill_sets/amber/skill_39.png",
+      "cyberpunk/skill_sets/amber/skill_40.png"
+    ]
+  },
+  "controlScheme": {
+    "mouse": "aim-lock",
+    "flags": {
+      "boxSelect": false,
+      "pointerLockAim": true,
+      "clickToMove": false,
+      "weaponScroll": true,
+      "dragInventory": true,
+      "inventoryClick": "use",
+      "equipMode": "click"
+    },
+    "hotkeys": [
+      {
+        "id": "forward",
+        "label": "Move Forward",
+        "defaultKey": "w"
+      },
+      {
+        "id": "back",
+        "label": "Move Back",
+        "defaultKey": "s"
+      },
+      {
+        "id": "left",
+        "label": "Strafe Left",
+        "defaultKey": "a"
+      },
+      {
+        "id": "right",
+        "label": "Strafe Right",
+        "defaultKey": "d"
+      },
+      {
+        "id": "sprint",
+        "label": "Sprint",
+        "defaultKey": "Shift"
+      },
+      {
+        "id": "crouch",
+        "label": "Crouch",
+        "defaultKey": "Control"
+      },
+      {
+        "id": "jump",
+        "label": "Jump",
+        "defaultKey": "Space"
+      },
+      {
+        "id": "inventory",
+        "label": "Inventory",
+        "defaultKey": "Tab"
+      },
+      {
+        "id": "craft",
+        "label": "Crafting",
+        "defaultKey": "c"
+      },
+      {
+        "id": "build",
+        "label": "Build",
+        "defaultKey": "b"
+      },
+      {
+        "id": "interact",
+        "label": "Interact / Gather",
+        "defaultKey": "e"
+      },
+      {
+        "id": "drop",
+        "label": "Drop",
+        "defaultKey": "g"
+      }
+    ]
+  },
+  "layout": {},
+  "classes": [
+    "gk-panel",
+    "gk-slot",
+    "gk-bar",
+    "gk-btn",
+    "gk-icon",
+    "gk-tabs",
+    "gk-node",
+    "gk-card"
+  ],
+  "generatedAt": "2026-06-16T06:09:13.899Z"
+}
