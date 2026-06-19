@@ -11,6 +11,7 @@
   ],
   "env": {
     "NODE_ENV": "production",
+    "VERCEL": "1",
     "TREATY_CHAT_URL": "https://master.grudge-studio.com"
   }
 }
