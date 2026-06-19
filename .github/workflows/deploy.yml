@@ -21,6 +21,11 @@ jobs:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'production' }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      # Project id is non-secret config; set it as repo secret or variable VERCEL_PROJECT_ID.
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || vars.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,26 +34,44 @@ jobs:
         with:
           node-version: '20'
 
+      # Vercel's GitHub integration already auto-deploys; this Actions deploy
+      # only runs when a VERCEL_TOKEN secret is configured (otherwise no-op).
       - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
         working-directory: grudge-agent
         run: |
           npm install -g vercel
-          vercel --token=${{ secrets.VERCEL_TOKEN }} \
+          vercel --token="$VERCEL_TOKEN" \
             --yes \
             ${{ (github.event.inputs.environment || 'production') == 'production' && '--prod' || '' }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Skip Vercel (no token)
+        if: env.VERCEL_TOKEN == ''
+        run: echo "VERCEL_TOKEN not set - skipping Actions deploy (Vercel GitHub integration handles deploys)."
 
   deploy-railway:
     name: Deploy to Railway
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'production' }}
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Railway
-        uses: bervProject/railway-deploy@v1.0.0
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: gruda-agent
+          node-version: '20'
+
+      # Runs only when RAILWAY_TOKEN is configured; uses the official CLI
+      # (the previous bervProject/railway-deploy@v1.0.0 action no longer resolves).
+      - name: Deploy to Railway
+        if: env.RAILWAY_TOKEN != ''
+        working-directory: grudge-agent
+        run: |
+          npm install -g @railway/cli
+          railway up --service gruda-agent --ci
+
+      - name: Skip Railway (no token)
+        if: env.RAILWAY_TOKEN == ''
+        run: echo "RAILWAY_TOKEN not set - skipping Railway deploy."
