@@ -26,6 +26,8 @@ const WebSocket = require("ws");
 const multer    = require("multer");
 const grokBuild = require("./lib/grok-build");
 const grudgeAiHub = require("./lib/grudgeAiHub");
+const anythingllm = require("./lib/anythingllm");
+const fleetMismatch = require("./lib/fleet-mismatch");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -468,6 +470,22 @@ app.post("/api/chat/stream", async (req, res) => {
     });
   }
 
+  if (anythingllm.isAllmModel(model)) {
+    const lastUser = [...allMsgs].reverse().find(m => m.role === "user");
+    let msg = lastUser?.content || "";
+    if (/mismatch|fleet audit|url drift/i.test(msg)) {
+      try {
+        const audit = await fleetMismatch.fetchFleetMismatch();
+        msg = `Fleet mismatch audit (${audit.issueCount} issues):\n${JSON.stringify(audit.issues, null, 2)}\n\n${msg}`;
+      } catch (e) { msg = `[mismatch fetch failed: ${e.message}]\n\n${msg}`; }
+    }
+    return anythingllm.streamAllmChat(res, {
+      workspace: anythingllm.allmWorkspace(model),
+      message: msg,
+      mode: /mismatch|debug|audit/i.test(msg) ? "query" : "chat",
+    });
+  }
+
   let r;
   try {
     r = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -560,14 +578,48 @@ app.post("/api/onboarding/complete", async (req, res) => {
 app.get("/api/models", async (_req, res) => {
   const grok = grokBuild.listGrokModels();
   const hub = grudgeAiHub.listHubModels();
+  const allm = anythingllm.listAllmModels();
   try {
     const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal:AbortSignal.timeout(5000) });
     const d = await r.json();
     const ollama = (d.models || []).map(m => ({ name: m.name, provider: "ollama" }));
-    return res.json({ models: [...hub, ...grok, ...ollama], grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: ollama.length > 0 });
+    return res.json({
+      models: [...allm, ...hub, ...grok, ...ollama],
+      anythingllm: allm.length > 0, grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: ollama.length > 0,
+    });
   } catch {
-    res.json({ models: [...hub, ...grok], grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: false });
+    res.json({
+      models: [...allm, ...hub, ...grok],
+      anythingllm: allm.length > 0, grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: false,
+    });
   }
+});
+
+app.get("/api/ai/rag/status", async (_req, res) => {
+  try {
+    res.json({ ...anythingllm.getConfig(), ...(await anythingllm.checkStatus()) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/ai/rag/chat", async (req, res) => {
+  try {
+    const { message, workspace, task, mode, sessionId, includeMismatch } = req.body || {};
+    if (!message) return res.status(400).json({ error: "message required" });
+    let msg = String(message);
+    if (includeMismatch || task === "mismatch") {
+      const audit = await fleetMismatch.fetchFleetMismatch();
+      msg = `Fleet mismatch (${audit.issueCount}):\n${JSON.stringify(audit.issues)}\n\n${msg}`;
+    }
+    const slug = workspace || anythingllm.resolveWorkspace(task);
+    const result = await anythingllm.workspaceChat({ workspace: slug, message: msg, mode, sessionId });
+    res.json({ workspace: slug, ...result });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+app.get("/api/fleet/mismatch", async (_req, res) => {
+  try {
+    res.json(await fleetMismatch.fetchFleetMismatch());
+  } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
 /* ── Skills (Grok Build pattern) ─────────────────────────────── */

@@ -18,6 +18,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="/gruda-king.png">
 <script src="https://js.puter.com/v2/" async></script>
+<script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
+<script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 <style>
 :root {
@@ -616,6 +618,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
         </div>
 
+        <div class="int-card">
+          <div class="int-head">
+            <div class="int-icon">⚔</div>
+            <div class="int-name">Fleet Connect</div>
+          </div>
+          <div class="int-desc">Characters, home-island, Puter cloud saves, and Grudge ID — linked across the fleet.</div>
+          <div id="grudge-fleet-connect" data-grudge-fleet-connect style="margin:8px 0"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <a class="int-btn" href="https://grudge-studio.puter.site" target="_blank" rel="noreferrer">Puter Cloud</a>
+            <a class="int-btn" href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>
+            <button class="int-btn" onclick="runFleetMismatch()">Fleet mismatch audit</button>
+          </div>
+          <pre id="fleet-mismatch-out" style="display:none;margin-top:8px;font-size:0.7rem;max-height:160px;overflow:auto;background:var(--surface2);padding:8px;border-radius:6px"></pre>
+        </div>
+
         <!-- Google Drive -->
         <div class="int-card" id="int-google">
           <div class="int-head">
@@ -885,7 +902,17 @@ async function initApp() {
     if (c.displayName) displayName = c.displayName;
   } catch(e){}
   try { GrudgeAuth.restore(); } catch(e){}
+  if (window.GrudgeFleetConnect) GrudgeFleetConnect.mount("#grudge-fleet-connect");
   setInterval(checkHealth,15000);
+}
+
+async function runFleetMismatch(){
+  const el=document.getElementById("fleet-mismatch-out");
+  el.style.display="block"; el.textContent="Running fleet audit...";
+  try{
+    const d=await fetch("/api/fleet/mismatch").then(r=>r.json());
+    el.textContent=JSON.stringify(d,null,2);
+  }catch(e){ el.textContent="Audit failed: "+e.message; }
 }
 
 const PUTER_MODELS = ["gpt-4o-mini","gpt-4o","claude-3-5-sonnet","gemini-2.0-flash","deepseek-chat"];
@@ -901,9 +928,12 @@ async function loadModels() {
   try {
     const d=await fetch("/api/models").then(r=>r.json());
     const models=d.models||[];
+    const allm=models.filter(m=>String(m.name).indexOf("allm:")===0);
     const grok=models.filter(m=>isGrokModel(m.name));
-    const ollama=models.filter(m=>!isGrokModel(m.name));
-    if (grok.length) grokOpts=`<optgroup label="Grok (agent tools)">`+
+    const ollama=models.filter(m=>!isGrokModel(m.name)&&String(m.name).indexOf("allm:")!==0&&String(m.name).indexOf("grudge:")!==0);
+    if (allm.length) grokOpts=`<optgroup label="AnythingLLM (fleet RAG)">`+
+      allm.map(m=>`<option value="${m.name}">${m.label||m.name.replace(/^allm:/,"")}</option>`).join("")+`</optgroup>`;
+    if (grok.length) grokOpts+=`<optgroup label="Grok (agent tools)">`+
       grok.map(m=>`<option value="${m.name}">${(m.label||m.name).replace(/^grok:/,"")}</option>`).join("")+`</optgroup>`;
     if (ollama.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
       ollama.map(m=>`<option value="${m.name}">${m.name}</option>`).join("")+`</optgroup>`;
