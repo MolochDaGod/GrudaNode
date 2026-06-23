@@ -22,13 +22,14 @@ function Read-DotEnv([string]$Path) {
 }
 
 $src = Read-DotEnv $EnvFile
-$GRUDGE_AI_KEY = $src["GRUDGE_AI_KEY"] ?? $src["LEGION_HUB_API_KEY"]
+$GRUDGE_AI_KEY = if ($src["GRUDGE_AI_KEY"]) { $src["GRUDGE_AI_KEY"] } else { $src["LEGION_HUB_API_KEY"] }
 if (-not $GRUDGE_AI_KEY) { throw "GRUDGE_AI_KEY or LEGION_HUB_API_KEY missing in $EnvFile" }
+$hubUrl = if ($src["GRUDGE_AI_HUB_URL"]) { $src["GRUDGE_AI_HUB_URL"] } else { "https://ai.grudge-studio.com" }
 
 $envMap = @{
     GRUDGE_AI_KEY        = $GRUDGE_AI_KEY
     LEGION_HUB_API_KEY   = $GRUDGE_AI_KEY
-    GRUDGE_AI_HUB_URL    = ($src["GRUDGE_AI_HUB_URL"] ?? "https://ai.grudge-studio.com")
+    GRUDGE_AI_HUB_URL    = $hubUrl
     XAI_API_KEY          = $src["XAI_API_KEY"]
     DATABASE_URL         = $src["DATABASE_URL"]
     ELEVENLABS_API_KEY   = $src["ELEVEN_LABS_API"]
