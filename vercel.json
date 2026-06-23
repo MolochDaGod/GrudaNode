@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "installCommand": "npm install --prefix grudge-agent",
+  "builds": [
+    { "src": "grudge-agent/server.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "grudge-agent/server.js" },
+    { "src": "/favicon.ico", "dest": "grudge-agent/server.js" },
+    { "src": "/favicon.svg", "dest": "grudge-agent/server.js" },
+    { "src": "/apple-touch-icon.png", "dest": "grudge-agent/server.js" },
+    { "src": "/(.*)", "dest": "grudge-agent/server.js" }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "VERCEL": "1",
+    "TREATY_CHAT_URL": "https://master.grudge-studio.com",
+    "GRUDGE_AI_HUB_URL": "https://ai.grudge-studio.com"
+  }
+}

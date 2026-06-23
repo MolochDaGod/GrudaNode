@@ -38,7 +38,7 @@ jobs:
       # only runs when a VERCEL_TOKEN secret is configured (otherwise no-op).
       - name: Deploy to Vercel
         if: env.VERCEL_TOKEN != ''
-        working-directory: grudge-agent
+        # Project rootDirectory is grudge-agent — deploy from monorepo root.
         run: |
           npm install -g vercel
           vercel --token="$VERCEL_TOKEN" \

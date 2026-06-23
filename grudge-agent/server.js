@@ -125,9 +125,43 @@ function buildPersona(cfg, memory, systemExtra) {
 const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
+const PUBLIC_DIR = path.join(__dirname, "public");
+
+const BRAND_ICON_TYPES = {
+  ".ico": "image/x-icon",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+};
+
+function sendPublicAsset(res, name) {
+  const file = path.join(PUBLIC_DIR, name);
+  if (!fs.existsSync(file)) return false;
+  const ext = path.extname(name).toLowerCase();
+  res.setHeader("Content-Type", BRAND_ICON_TYPES[ext] || "application/octet-stream");
+  res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+  res.sendFile(file);
+  return true;
+}
+
+// Browsers probe /favicon.ico on every origin; always answer from brand assets.
+function serveBrandIcon(req, res, next) {
+  for (const name of ["favicon.ico", "gruda-king.png", "gruda-king.svg"]) {
+    if (sendPublicAsset(res, name)) return;
+  }
+  next();
+}
 
 app.use(express.json({ limit: "10mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.get("/favicon.ico", serveBrandIcon);
+app.get("/favicon.svg", (req, res, next) => {
+  if (sendPublicAsset(res, "gruda-king.svg") || sendPublicAsset(res, "favicon.ico")) return;
+  next();
+});
+app.get("/apple-touch-icon.png", (req, res, next) => {
+  if (sendPublicAsset(res, "gruda-king.png")) return;
+  next();
+});
+app.use(express.static(PUBLIC_DIR));
 
 /* ── Uploads (multipart) ─────────────────────────────────────── */
 const UPLOAD_TMP = path.join(os.tmpdir(), "gruda-uploads");
@@ -1617,8 +1651,13 @@ app.get("/api/projects/:name/files", (req, res) => {
   res.json({ files: results, count: results.length, project: req.params.name });
 });
 
-/* ── Static ──────────────────────────────────────────────────── */
-app.use(express.static(path.join(__dirname,"public")));
+/* ── SPA fallback (deep links hit index.html) ─────────────────── */
+app.get("*", (req, res, next) => {
+  if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+  const index = path.join(PUBLIC_DIR, "index.html");
+  if (fs.existsSync(index)) return res.sendFile(index);
+  next();
+});
 
 /* ── WebSocket (browser clients) ─────────────────────────────── */
 wss.on("connection", (ws) => {

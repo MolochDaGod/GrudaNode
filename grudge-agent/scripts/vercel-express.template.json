@@ -14,8 +14,6 @@
   ],
   "env": {
     "NODE_ENV": "production",
-    "VERCEL": "1",
-    "TREATY_CHAT_URL": "https://master.grudge-studio.com",
-    "GRUDGE_AI_HUB_URL": "https://ai.grudge-studio.com"
+    "VERCEL": "1"
   }
 }
