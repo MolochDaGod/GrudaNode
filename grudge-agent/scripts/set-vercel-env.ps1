@@ -33,7 +33,12 @@ $envMap = @{
     XAI_API_KEY          = $src["XAI_API_KEY"]
     DATABASE_URL         = $src["DATABASE_URL"]
     ELEVENLABS_API_KEY   = $src["ELEVEN_LABS_API"]
-    GRUDGE_AUTH_URL      = $src["GRUDGE_AUTH_URL"]
+    GRUDGE_AUTH_URL      = if ($src["GRUDGE_AUTH_URL"]) { $src["GRUDGE_AUTH_URL"] } else { $src["GRUDGE_ID_URL"] }
+    AUTH_GATEWAY_URL     = if ($src["AUTH_GATEWAY_URL"]) { $src["AUTH_GATEWAY_URL"] } else { "https://id.grudge-studio.com" }
+    GAME_API_URL         = if ($src["GAME_API_URL"]) { $src["GAME_API_URL"] } else { "https://api.grudge-studio.com" }
+    GRUDA_LEGION_URL     = "https://api.grudge-studio.com"
+    GRUDGE_PLATFORM_URL  = "https://grudge-platform.vercel.app"
+    GDEVELOP_URL         = "https://gdevelop-assistant.vercel.app"
     GRUDGE_R2_CDN        = $src["OBJECT_STORAGE_PUBLIC_URL"]
     GRUDGE_ASSET_API     = "https://api.grudge-studio.com"
     OPENAI_API_KEY       = $src["OPENAI_API_KEY"]
@@ -43,17 +48,28 @@ $envMap = @{
     ANYTHINGLLM_BASE_URL = $src["ANYTHINGLLM_BASE_URL"]
     ANYTHINGLLM_DEFAULT_WORKSPACE = $src["ANYTHINGLLM_DEFAULT_WORKSPACE"]
     GRUDGE_NEXUS_URL     = "https://grudachain.grudge-studio.com"
+    SUPABASE_URL         = $src["SUPABASE_URL"]
+    SUPABASE_ANON_KEY    = if ($src["SUPABASE_ANON_KEY"]) { $src["SUPABASE_ANON_KEY"] } else { $src["SUPABASE_PUBLISHABLE_KEY"] }
+    SUPABASE_SERVICE_ROLE_KEY = $src["SUPABASE_SERVICE_ROLE_KEY"]
+    SESSION_SECRET       = $src["SESSION_SECRET"]
 }
 
 $fleetAi = @("GRUDGE_AI_KEY", "LEGION_HUB_API_KEY", "GRUDGE_AI_HUB_URL")
 $agentFull = @("GRUDGE_AI_KEY", "LEGION_HUB_API_KEY", "GRUDGE_AI_HUB_URL", "XAI_API_KEY", "DATABASE_URL", "ELEVENLABS_API_KEY", "GRUDGE_AUTH_URL", "GRUDGE_R2_CDN", "GRUDGE_ASSET_API", "OPENAI_API_KEY", "ANYTHINGLLM_API_KEY", "ANYTHINGLLM_BASE_URL", "ANYTHINGLLM_DEFAULT_WORKSPACE", "GRUDGE_NEXUS_URL")
 
-$grudachainAi = @("ANYTHINGLLM_API_KEY", "ANYTHINGLLM_BASE_URL", "ANYTHINGLLM_DEFAULT_WORKSPACE")
+$nexusFull = @(
+    "GRUDGE_AI_KEY", "LEGION_HUB_API_KEY", "GRUDGE_AI_HUB_URL",
+    "DATABASE_URL", "GRUDGE_AUTH_URL", "AUTH_GATEWAY_URL", "GAME_API_URL",
+    "GRUDA_LEGION_URL", "GRUDGE_PLATFORM_URL", "GDEVELOP_URL",
+    "ANYTHINGLLM_API_KEY", "ANYTHINGLLM_BASE_URL", "ANYTHINGLLM_DEFAULT_WORKSPACE",
+    "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
+    "OPENAI_API_KEY", "INTERNAL_API_KEY", "SESSION_SECRET"
+)
 
 $projectKeys = [ordered]@{
     "grudaagent"            = $agentFull
     "gruda-agent"           = $agentFull
-    "grudachain"            = $grudachainAi
+    "grudachain"            = $nexusFull
     "grudgecontrol"         = $fleetAi
     "grudge-builder"        = $fleetAi + @("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "INTERNAL_API_KEY")
     "rts-grudge"            = $fleetAi
