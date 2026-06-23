@@ -25,6 +25,7 @@ const express   = require("express");
 const WebSocket = require("ws");
 const multer    = require("multer");
 const grokBuild = require("./lib/grok-build");
+const grudgeAiHub = require("./lib/grudgeAiHub");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -423,6 +424,16 @@ app.post("/api/chat/stream", async (req, res) => {
   const cfg = loadConfig();
   const sysContent = system || buildPersona(cfg, "", "");
   const allMsgs = sysContent ? [{ role:"system", content:sysContent }, ...messages] : messages;
+
+  if (grudgeAiHub.isHubModel(model)) {
+    return grudgeAiHub.streamHubChat(res, {
+      messages: allMsgs,
+      model,
+      role: "general",
+      generationConfig: { maxOutputTokens: 2048 },
+    });
+  }
+
   let r;
   try {
     r = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -514,13 +525,14 @@ app.post("/api/onboarding/complete", async (req, res) => {
 /* ── Models ──────────────────────────────────────────────────── */
 app.get("/api/models", async (_req, res) => {
   const grok = grokBuild.listGrokModels();
+  const hub = grudgeAiHub.listHubModels();
   try {
     const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal:AbortSignal.timeout(5000) });
     const d = await r.json();
     const ollama = (d.models || []).map(m => ({ name: m.name, provider: "ollama" }));
-    return res.json({ models: [...grok, ...ollama], grok: grokBuild.hasGrokApi(), ollama: ollama.length > 0 });
+    return res.json({ models: [...hub, ...grok, ...ollama], grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: ollama.length > 0 });
   } catch {
-    res.json({ models: grok, grok: grokBuild.hasGrokApi(), ollama: false });
+    res.json({ models: [...hub, ...grok], grudgeAi: hub.length > 0, grok: grokBuild.hasGrokApi(), ollama: false });
   }
 });
 
