@@ -48,9 +48,12 @@ $envMap = @{
 $fleetAi = @("GRUDGE_AI_KEY", "LEGION_HUB_API_KEY", "GRUDGE_AI_HUB_URL")
 $agentFull = @("GRUDGE_AI_KEY", "LEGION_HUB_API_KEY", "GRUDGE_AI_HUB_URL", "XAI_API_KEY", "DATABASE_URL", "ELEVENLABS_API_KEY", "GRUDGE_AUTH_URL", "GRUDGE_R2_CDN", "GRUDGE_ASSET_API", "OPENAI_API_KEY", "ANYTHINGLLM_API_KEY", "ANYTHINGLLM_BASE_URL", "ANYTHINGLLM_DEFAULT_WORKSPACE", "GRUDGE_NEXUS_URL")
 
+$grudachainAi = @("ANYTHINGLLM_API_KEY", "ANYTHINGLLM_BASE_URL", "ANYTHINGLLM_DEFAULT_WORKSPACE")
+
 $projectKeys = [ordered]@{
     "grudaagent"            = $agentFull
     "gruda-agent"           = $agentFull
+    "grudachain"            = $grudachainAi
     "grudgecontrol"         = $fleetAi
     "grudge-builder"        = $fleetAi + @("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "INTERNAL_API_KEY")
     "rts-grudge"            = $fleetAi
