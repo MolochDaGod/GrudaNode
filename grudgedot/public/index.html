@@ -213,15 +213,16 @@
   <div class="spacer"></div>
   <input class="nav-search" id="search-input" type="text" placeholder="Search games…" oninput="filterGames()">
   <div id="user-area">
-    <button class="nav-btn primary" onclick="window.location='/auth/login'">Sign in with GitHub</button>
+    <button class="nav-btn primary" id="btn-grudge-id" type="button">Grudge ID</button>
+    <button class="nav-btn" onclick="window.location='/auth/login'">GitHub</button>
   </div>
 </nav>
 
 <!-- ── Hero ────────────────────────────────────────── -->
 <div class="hero">
   <div class="hero-inner">
-    <h1>Grudge Studio<br><em>Game Library</em></h1>
-    <p>Download and play every game from Grudge Studio — powered by GitHub Releases.</p>
+    <h1>Grudge Studio<br><em>Releases Hub</em></h1>
+    <p>GitHub Releases mirror — browse and download builds. For the full SSO-integrated launcher (characters, fleet, 1360+ games), use <a href="https://gdevelop-assistant.vercel.app" style="color:var(--accent);font-weight:600">grudgeDot</a>.</p>
     <div class="hero-stats">
       <div class="stat"><div class="stat-num" id="stat-games">—</div><div class="stat-lbl">Games</div></div>
       <div class="stat"><div class="stat-num" id="stat-releases">—</div><div class="stat-lbl">Total Releases</div></div>
@@ -300,7 +301,55 @@
   </div>
 </div>
 
+<script src="https://grudachain.grudge-studio.com/grudge-fleet-sdk.js"></script>
 <script>
+  // ── Grudge ID via fleet SDK (manifest SSOT + Puter → Grudge ID scope) ───
+  GrudgeFleet.init({ puter: true }).catch(function () {});
+
+  document.getElementById('btn-grudge-id').addEventListener('click', async function () {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    try {
+      await GrudgeFleet.init({ puter: true, force: true });
+      if (window.GrudgeSSO && GrudgeSSO.scopePuterToGrudgeId) {
+        var result = await GrudgeSSO.scopePuterToGrudgeId('releases-hub');
+        if (result && result.profile) {
+          localStorage.setItem('grudge_display', result.profile.displayName || result.profile.username || 'Player');
+          renderGrudgeUser(result.profile);
+          return;
+        }
+      }
+      GrudgeFleet.signIn('releases-hub', location.href);
+    } catch (e) {
+      alert(e.message || 'Sign-in failed');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Grudge ID';
+    }
+  });
+
+  function renderGrudgeUser(profile) {
+    var name = profile.displayName || profile.username || 'Player';
+    document.getElementById('user-area').innerHTML =
+      '<span class="nav-btn" style="cursor:default;border-color:rgba(212,175,55,.4);color:#d4af37">' +
+      name + '</span>' +
+      '<button class="nav-btn" type="button" onclick="logoutGrudge()">Sign out</button>';
+  }
+
+  function logoutGrudge() {
+    ['grudge_auth_token','grudge_username','grudge_id','grudge_display'].forEach(function (k) {
+      localStorage.removeItem(k);
+    });
+    location.reload();
+  }
+
+  (function restoreGrudgeSession() {
+    var token = localStorage.getItem('grudge_auth_token');
+    var name = localStorage.getItem('grudge_display') || localStorage.getItem('grudge_username');
+    if (token && name) renderGrudgeUser({ displayName: name, username: name });
+  })();
+
   // ── State ────────────────────────────────────────────
   let allGames = [];
   let filtered = [];
