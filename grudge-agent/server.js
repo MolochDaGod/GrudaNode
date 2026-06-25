@@ -30,6 +30,8 @@ const anythingllm = require("./lib/anythingllm");
 const fleetMismatch = require("./lib/fleet-mismatch");
 const userInsights = require("./lib/user-insights");
 const treatyChat = require("./lib/treaty-chat");
+const orchestratorHub = require("./lib/orchestrator-hub");
+const { createLlmRouter } = require("./lib/llm-router");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -134,6 +136,14 @@ const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const INSIGHTS_DIR = path.join(DATA_DIR, "insights");
 const TREATY_DIR   = path.join(DATA_DIR, "treaty");
 const GRUDGE_SOCIAL_URL = (process.env.GRUDGE_SOCIAL_URL || "https://grudge-social.puter.site").replace(/\/$/, "");
+
+const llmRouter = createLlmRouter({
+  ollamaHost: OLLAMA_HOST,
+  defaultModel: DEFAULT_MODEL,
+  grokBuild,
+  grudgeAiHub,
+  isServerless: !!process.env.VERCEL,
+});
 // Best-effort: serverless hosts (Vercel) only allow writes under /tmp
 try { fs.mkdirSync(PROJECTS_DIR, { recursive: true }); } catch {}
 try { fs.mkdirSync(DATA_DIR,     { recursive: true }); } catch {}
@@ -1088,6 +1098,9 @@ app.get("/api/health", async (_req, res) => {
     serverless: !!process.env.VERCEL,
     storage: describeStoragePaths(),
     pwa: true,
+    orchestrator: true,
+    llm: await llmRouter.probe(),
+    forge: orchestratorHub.FORGE_URL,
     db: pgReady,
     music: !!MUREKA_KEY,
     voice: !!ELEVEN_KEY,
@@ -1550,20 +1563,7 @@ app.all(/^\/api\/grudachain\/(.*)/, async (req, res) => {
    orchestrator plans → dispatches workers → runs a QA/checks pass.
    Every step is appended to orchestrator.log.jsonl for inspection.
    ═══════════════════════════════════════════════════════════════ */
-const WORKERS = {
-  code:     { name:"Code Worker",     scope:"Writes/edits code, configs, scripts; uses files + shell.",
-             system:"You are the Code Worker. Produce correct, minimal, working code and clear file/CLI steps. Note risky actions." },
-  art3d:    { name:"3D / Art Worker", scope:"three.js scenes, models, materials, game boards, visuals.",
-             system:"You are the 3D/Art Worker. Design three.js scene graphs, materials, layouts and game boards as concrete JSON/specs." },
-  lore:     { name:"Lore Worker",     scope:"Story, world, NPCs, D&D character writing.",
-             system:"You are the Lore Worker. Write vivid, consistent lore, NPCs and D&D characters that respect established truth." },
-  balance:  { name:"Balance Worker",  scope:"Game balance: stats, economy, difficulty curves.",
-             system:"You are the Balance Worker. Tune stats/economy/difficulty with concrete numbers and rationale." },
-  campaign: { name:"Campaign Worker", scope:"D&D campaigns: acts, encounters, maps, quests.",
-             system:"You are the Campaign Worker. Design campaign acts, encounters, maps and quest chains with clear structure." },
-  qa:       { name:"QA / Checks",     scope:"Validates outputs against the shared truth; flags conflicts.",
-             system:"You are the QA/Checks Worker. Rigorously compare artifacts to the goal and truth; list conflicts, gaps and contradictions plainly." },
-};
+const WORKERS = orchestratorHub.WORKERS;
 
 function truthPaths(project) {
   const safe = (project || "_default").replace(/[^a-z0-9_\-. ]/gi, "_");
@@ -1585,19 +1585,66 @@ function logStep(project, entry) {
   const { base, log } = truthPaths(project);
   try { fs.mkdirSync(base, { recursive: true }); fs.appendFileSync(log, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n", "utf8"); } catch {}
 }
-// Single non-streaming completion via Ollama (used by orchestrator workers)
 async function llmComplete(model, system, user, ms = 60000) {
-  const r = await fetch(`${OLLAMA_HOST}/api/chat`, {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ model, stream:false, messages:[{role:"system",content:system},{role:"user",content:user}] }),
-    signal: AbortSignal.timeout(ms),
-  });
-  if (!r.ok) throw new Error(`model ${r.status}`);
-  return (await r.json()).message?.content || "";
+  const { text, backend } = await llmRouter.complete({ model, system, user, timeoutMs: ms });
+  return text;
 }
 
 app.get("/api/workers", (_req, res) => {
-  res.json({ workers: Object.entries(WORKERS).map(([id, w]) => ({ id, name: w.name, scope: w.scope })) });
+  res.json({ workers: orchestratorHub.listWorkers() });
+});
+
+app.get("/api/orchestrator/config", (_req, res) => {
+  res.json(orchestratorHub.orchestratorConfig());
+});
+
+app.get("/api/forge/tools", (_req, res) => {
+  res.json({ forgeUrl: orchestratorHub.FORGE_URL, tools: orchestratorHub.FORGE_TOOLS });
+});
+
+app.get("/api/mineloader/tools", (_req, res) => {
+  res.json({ root: orchestratorHub.MINE_LOADER_PATH, tools: orchestratorHub.MINELLOADER_TOOLS });
+});
+
+app.get("/api/llm/probe", async (_req, res) => {
+  res.json(await llmRouter.probe());
+});
+
+app.post("/api/terminal/exec", (req, res) => {
+  const { command, cwd } = req.body || {};
+  if (!command) return res.status(400).json({ error: "command required" });
+  if (!orchestratorHub.isTerminalAllowed(command)) {
+    return res.status(403).json({ error: "Command not in allow-list (npm, node, git, ollama, dir, ls, …)" });
+  }
+  const workDir = cwd || PROJECTS_DIR;
+  try {
+    const out = execSync(command, { cwd: workDir, timeout: 45000, encoding: "utf8", stdio: "pipe" });
+    res.json({ ok: true, cwd: workDir, output: out.slice(0, 12000) });
+  } catch (err) {
+    res.status(200).json({
+      ok: false,
+      cwd: workDir,
+      output: (err.stdout || "").slice(0, 8000),
+      error: (err.stderr || err.message || "").slice(0, 4000),
+      code: err.status,
+    });
+  }
+});
+
+app.get("/api/deploy/local/script", (req, res) => {
+  const port = parseInt(req.query.port || "3200", 10);
+  const plat = req.query.platform || process.platform;
+  const script = orchestratorHub.localDeployScript(plat, port);
+  const ext = plat === "win32" || plat === "windows" ? "bat" : "sh";
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="gruda-local-deploy.${ext}"`);
+  res.send(script);
+});
+
+app.get("/api/deploy/puter-worker/template", (req, res) => {
+  const slug = (req.query.slug || "agent-api").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const code = orchestratorHub.PUTER_WORKER_TEMPLATE.replace(/\{\{slug\}\}/g, slug);
+  res.json({ slug, code, deployHint: `await puter.workers.create("${slug}", workerSource)` });
 });
 
 app.get("/api/truth", (req, res) => {
@@ -1625,7 +1672,9 @@ app.post("/api/orchestrate", async (req, res) => {
   // 1) Plan
   let tasks = [];
   try {
-    const planSys = `You are the Orchestrator AI. Decompose the goal into 2-5 ordered tasks, each assigned to ONE worker from: ${Object.keys(WORKERS).join(", ")}. Return ONLY JSON: {"tasks":[{"worker":"<id>","task":"<what to do>"}]}.`;
+    const planSys = `You are the Orchestrator AI for Grudge Studio. Decompose the goal into 2-6 ordered tasks, each assigned to ONE worker from: ${Object.keys(WORKERS).join(", ")}.
+Use forge for forge.grudge-studio.com / ObjectStore scenes; voxel for Mine-Loader voxelcraft; deploy for Puter workers or local npx; codex for design specs; code for Node/terminal edits.
+Return ONLY JSON: {"tasks":[{"worker":"<id>","task":"<what to do>"}]}.`;
     const raw = await llmComplete(m, planSys, `Goal: ${goal}\n\nCurrent truth:\n${JSON.stringify(readTruth(proj)).slice(0,2000)}`);
     tasks = (JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]).tasks || []).filter(t => WORKERS[t.worker]).slice(0, 6);
   } catch (e) {

@@ -140,6 +140,27 @@ function toolsForXai(tools) {
   }));
 }
 
+/** Single non-streaming completion (orchestrator / fallback router) */
+async function completeChat({ messages, model, timeout = 90000 }) {
+  if (!XAI_KEY) throw new Error("XAI_API_KEY not set");
+  const modelId = grokModelId(model);
+  const resp = await fetch(`${XAI_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${XAI_KEY}`,
+    },
+    body: JSON.stringify({ model: modelId, messages }),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    throw new Error(`Grok API ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
 /**
  * Run agentic tool loop via xAI Grok (OpenAI-compatible chat completions).
  * emit: (obj) => void — SSE events
@@ -243,4 +264,5 @@ module.exports = {
   buildSkillsPrompt,
   augmentSystemPrompt,
   runGrokAgentLoop,
+  completeChat,
 };

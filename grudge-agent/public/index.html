@@ -26,6 +26,9 @@
 <script src="/local-store.js"></script>
 <script src="/pwa-install.js"></script>
 <script src="/appdata.js"></script>
+<script src="/auto-mode.js"></script>
+<script src="/terminal-panel.js"></script>
+<script src="/orchestrator-panel.js"></script>
 <script src="/ollama-client.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
@@ -76,6 +79,32 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .agent-run-row{padding:5px 0;border-bottom:1px solid var(--border);}
 .agent-run-row:last-child{border-bottom:none;}
 .agent-run-title{color:var(--text);font-weight:600;}
+#ide-bottom{height:180px;min-height:140px;}
+.ide-panel-tabs{display:flex;gap:0;background:var(--surface);border-bottom:1px solid var(--border);}
+.ide-panel-tab{padding:4px 12px;font-size:.68rem;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;}
+.ide-panel-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+#ide-panel-terminal,#ide-panel-output{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+#terminal-output{flex:1;overflow-y:auto;padding:6px 10px;font-family:Consolas,monospace;font-size:.72rem;background:#0a0a12;color:#c8e6c9;}
+.term-line{white-space:pre-wrap;word-break:break-all;line-height:1.4;}
+.term-cmd{color:var(--gold);}
+.term-err{color:var(--red);}
+.term-meta{color:var(--muted);}
+#terminal-input-row{display:flex;border-top:1px solid var(--border);background:var(--surface);}
+#terminal-input{flex:1;background:#000;border:none;color:var(--text);padding:6px 10px;font-family:Consolas,monospace;font-size:.72rem;outline:none;}
+#terminal-cwd{font-size:.65rem;color:var(--muted);padding:4px 10px;border-top:1px solid var(--border);}
+#orch-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
+#orch-left{width:280px;min-width:280px;border-right:1px solid var(--border);padding:12px;overflow-y:auto;background:var(--sidebar);}
+#orch-main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:12px;}
+#orch-goal{width:100%;min-height:72px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:10px;font-size:.82rem;resize:vertical;font-family:inherit;}
+.orch-chip{display:inline-block;padding:3px 8px;margin:2px;border-radius:12px;border:1px solid var(--border);font-size:.65rem;color:var(--muted);}
+.orch-tool-btn,.orch-tool-chip{display:inline-block;margin:3px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:.68rem;cursor:pointer;}
+.orch-tool-chip{cursor:default;}
+#orch-log{flex:1;overflow-y:auto;background:#000;border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-family:Consolas,monospace;font-size:.72rem;margin-top:10px;}
+.orch-line{margin-bottom:4px;color:var(--muted);}
+.orch-line.orch-worker{color:var(--blue);}
+.orch-line.orch-err{color:var(--red);}
+.orch-line.orch-done{color:var(--green);}
+#orch-truth{height:120px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:.68rem;font-family:Consolas,monospace;margin-top:8px;}
 
 /* ── ONBOARDING ── */
 #onboarding{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:900;display:none;align-items:center;justify-content:center;}
@@ -478,7 +507,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </select>
     <div class="sb-label">Mode</div>
     <div class="sb-mode">
-      <button class="mode-btn active" id="mode-chat" onclick="setMode('chat')">💬 Chat</button>
+      <button class="mode-btn active" id="mode-auto" onclick="setMode('auto')">⚡ Auto</button>
+      <button class="mode-btn" id="mode-chat" onclick="setMode('chat')">💬 Chat</button>
       <button class="mode-btn" id="mode-agent" onclick="setMode('agent')">🤖 Agent</button>
     </div>
     <div class="sb-label">Navigate</div>
@@ -488,6 +518,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <button class="nav-btn" id="nav-ide" onclick="showTab('ide')">🖥️ IDE</button>
       <button class="nav-btn" id="nav-env" onclick="showTab('env')">🎮 Environment</button>
       <button class="nav-btn" id="nav-assets" onclick="showTab('assets')">🎨 Assets</button>
+      <button class="nav-btn" id="nav-orch" onclick="showTab('orch')">🎛️ Orchestrator</button>
       <button class="nav-btn" id="nav-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</button>
     </div>
     <div class="sb-label">Projects</div>
@@ -509,6 +540,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <div class="tab" id="tab-ide" onclick="showTab('ide')">🖥️ IDE</div>
       <div class="tab" id="tab-env" onclick="showTab('env')">🎮 Environment</div>
       <div class="tab" id="tab-assets" onclick="showTab('assets')">🎨 Assets</div>
+      <div class="tab" id="tab-orch" onclick="showTab('orch')">🎛️ Orchestrator</div>
       <div class="tab" id="tab-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</div>
     </div>
 
@@ -575,9 +607,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
               <span id="ide-lang">javascript</span>
               <button id="run-btn" onclick="runCode()">▶ Run</button>
               <button id="snippet-btn" onclick="generateSnippet()">✨ AI Snippet</button>
+              <button class="int-btn" style="padding:2px 8px;font-size:.68rem" onclick="GrudaTerminal.showTab('terminal')">⌨ Terminal</button>
               <span style="margin-left:auto" id="ide-status">Ready</span>
             </div>
-            <div id="ide-output"><span class="out-sys">// Output appears here after Run</span></div>
+            <div class="ide-panel-tabs">
+              <div class="ide-panel-tab active" id="ide-tab-output" onclick="GrudaTerminal.showTab('output')">Output</div>
+              <div class="ide-panel-tab" id="ide-tab-terminal" onclick="GrudaTerminal.showTab('terminal')">Terminal</div>
+            </div>
+            <div id="ide-panel-output" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+              <div id="ide-output"><span class="out-sys">// Output appears here after Run</span></div>
+            </div>
+            <div id="ide-panel-terminal" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+              <div id="terminal-output"><div class="term-line term-meta">GRUDA terminal — npm, node, git, ollama (allow-listed)</div></div>
+              <div id="terminal-cwd">(project root)</div>
+              <div id="terminal-input-row"><input id="terminal-input" placeholder="npm install · node script.js · git status · ollama list" autocomplete="off"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -631,6 +675,37 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <input id="asset-search" placeholder="Search assets…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter')loadAssets()">
       </div>
       <div id="asset-grid"><div class="asset-loading">Loading assets…</div></div>
+    </div>
+
+    <!-- Orchestrator Tab -->
+    <div class="tab-panel" id="panel-orch">
+      <div id="orch-wrap">
+        <div id="orch-left">
+          <h3 style="font-size:.75rem;color:var(--accent);margin-bottom:8px">Worker Team</h3>
+          <div id="orch-workers"></div>
+          <h3 style="font-size:.7rem;color:var(--muted);margin:12px 0 6px">Forge</h3>
+          <div id="orch-forge-tools"></div>
+          <h3 style="font-size:.7rem;color:var(--muted);margin:12px 0 6px">Mine-Loader</h3>
+          <div id="orch-mine-tools"></div>
+          <h3 style="font-size:.7rem;color:var(--muted);margin:12px 0 6px">Deploy</h3>
+          <button class="int-btn" style="width:100%;margin-bottom:4px" onclick="GrudaOrchestrator.deployLocal()">⬇ Local + Ollama</button>
+          <input id="orch-worker-slug" placeholder="puter worker slug" style="width:100%;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:.72rem">
+          <button class="int-btn primary" style="width:100%" onclick="GrudaOrchestrator.deployPuterWorker()">☁ Free Puter Worker</button>
+          <span id="orch-llm-badge" style="display:block;font-size:.65rem;color:var(--muted);margin-top:10px"></span>
+        </div>
+        <div id="orch-main">
+          <label style="font-size:.72rem;color:var(--muted)">Orchestrator goal (plans → workers → QA)</label>
+          <textarea id="orch-goal" placeholder="e.g. Design a voxel dungeon for Mine-Loader, export Forge scene, deploy Puter worker API…"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="int-btn primary" id="orch-run-btn" onclick="GrudaOrchestrator.run()">▶ Run Orchestrator</button>
+            <button class="int-btn" onclick="GrudaOrchestrator.openForge()">🔗 Open Forge</button>
+            <button class="int-btn" onclick="GrudaOrchestrator.refreshTruth()">↻ Truth</button>
+          </div>
+          <div id="orch-log"></div>
+          <label style="font-size:.68rem;color:var(--muted);margin-top:8px">Communal truth (.gruda/truth.json)</label>
+          <pre id="orch-truth">{}</pre>
+        </div>
+      </div>
     </div>
 
     <!-- Cloud & Deploy Tab -->
@@ -762,6 +837,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
         </div>
 
+        <h3>AI Orchestrator</h3>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
+          Multi-worker orchestration with Forge, Mine-Loader tools, Puter workers, and Ollama fallback.
+        </div>
+        <button class="int-btn primary" onclick="showTab('orch')" style="margin-bottom:12px">🎛️ Open Orchestrator</button>
+
         <h3>Install Web App (PWA)</h3>
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
           Install GRUDA Agent to your desktop or phone — works offline for the shell, stores data in browser IndexedDB.
@@ -846,7 +927,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <script>
 /* ── STATE ── */
 let currentModel = "";
-let currentMode  = "chat";
+let currentMode  = "auto";
 let activeProj   = null;
 let messages     = [];
 let isStreaming  = false;
@@ -1149,6 +1230,15 @@ async function initApp(hydrated) {
   const params = new URLSearchParams(location.search);
   if (params.get("tab")) showTab(params.get("tab"));
   if (params.get("mode") === "agent") setMode("agent");
+  else if (params.get("mode") === "auto") setMode("auto");
+  else {
+    try {
+      const saved = localStorage.getItem("gruda_mode");
+      if (saved) setMode(saved);
+      else setMode("auto");
+    } catch(e) { setMode("auto"); }
+  }
+  try { GrudaTerminal.bind(); } catch(e){}
 }
 
 async function runFleetMismatch(){
@@ -1248,6 +1338,7 @@ async function selectProj(p) {
   document.getElementById("proj-badge").textContent="📁 "+p.name;
   document.querySelectorAll(".proj-item").forEach(e=>e.classList.remove("active"));
   document.getElementById("pj-"+p.name)?.classList.add("active");
+  try { GrudaTerminal.setCwd(p.path || ""); } catch(e){}
   await refreshMem();
 }
 
@@ -1392,11 +1483,12 @@ function initWS() {
 
 /* ── TABS ── */
 function showTab(tab) {
-  ["ai","treaty","ide","env","assets","cloud"].forEach(t=>{
+  ["ai","treaty","ide","env","assets","orch","cloud"].forEach(t=>{
     document.getElementById("panel-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("tab-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("nav-"+t)?.classList.toggle("active",t===tab);
   });
+  if(tab==="orch")   { try { GrudaOrchestrator.init(); } catch(e){} }
   if(tab==="cloud")  { loadIntegrations(); refreshCloudStorageUI(); }
   if(tab==="treaty") { updateTreatyAccountHint(); initTreaty(); }
   if(tab==="ide")    { initMonaco(); refreshTree(); }
@@ -2002,8 +2094,19 @@ function envUseAsset(key){
 /* ── MODE ── */
 function setMode(m) {
   currentMode=m;
+  document.getElementById("mode-auto")?.classList.toggle("active",m==="auto");
   document.getElementById("mode-chat").classList.toggle("active",m==="chat");
   document.getElementById("mode-agent").classList.toggle("active",m==="agent");
+  try { localStorage.setItem("gruda_mode", m); } catch(e){}
+}
+
+function resolveSendMode(text) {
+  if (currentMode !== "auto") return currentMode;
+  return GrudaAutoMode.pick(text, {
+    hasOllama: !!(window._clientOllama && GrudaOllama?.available),
+    hasGrok: !!window._hasGrok,
+    hasProject: !!activeProj,
+  });
 }
 
 /* ── SEND ── */
@@ -2014,12 +2117,13 @@ async function send() {
   const box=document.getElementById("input-box");
   const txt=box.value.trim();
   if(!txt||isStreaming)return;
-  if(!currentModel && currentMode==="chat") return;
+  const sendMode = resolveSendMode(txt);
+  if(!currentModel && sendMode==="chat") return;
   document.getElementById("welcome")?.remove();
   box.value=""; autoResize(box);
   const um={role:"user",content:txt};
   messages.push(um); appendMsg("user",txt);
-  if(currentMode==="agent") await runAgent(); else await runChat();
+  if(sendMode==="agent") await runAgent(); else await runChat();
 }
 
 /* ── CHAT STREAM ── */
