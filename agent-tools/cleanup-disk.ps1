@@ -31,8 +31,12 @@ if (-not $SkipScan) {
 Write-Host "=== Purge CDN-verified duplicates (no upload) ==="
 Invoke-Audit @("--purge-only")
 
-Write-Host "=== Upload remaining + purge ==="
-Invoke-Audit @("--upload", "--purge", "--priority", "--max-mb", "200")
+Write-Host "=== Upload remaining + purge (batched) ==="
+foreach ($batch in @(500, 500, 500, 0)) {
+    $args = @("--upload", "--purge", "--priority", "--include-small", "--max-mb", "200")
+    if ($batch -gt 0) { $args += @("--limit", "$batch") }
+    Invoke-Audit $args
+}
 
 if ($RemoveWorktreeJunk) {
     Write-Host "=== Remove stray worktree folders ==="
