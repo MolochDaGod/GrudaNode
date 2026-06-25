@@ -13,7 +13,8 @@ err()  { echo -e "${RED}  [✗] $1${NC}"; exit 1; }
 cd "$(dirname "$0")"
 echo ""
 echo "  ╔═══════════════════════════════════════════════╗"
-echo "  ║   GRUDA AGENT  v1.0.0                         ║"
+PKG_VER="$(node -p "require('./package.json').version" 2>/dev/null || echo '1.2.0')"
+echo "  ║   GRUDA AGENT  v${PKG_VER}                      ║"
 echo "  ║   Grudge Studio · RacAlvin The Pirate King    ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo ""
@@ -68,4 +69,9 @@ elif command -v open &>/dev/null; then
     (sleep 2 && open http://localhost:3200) &
 fi
 
-node server.js
+if [ -f "server.js" ]; then
+  node server.js
+else
+  info "No local server.js — using npx gruda-agent..."
+  exec npx --yes gruda-agent@latest --port "${PORT:-3200}" --no-open
+fi

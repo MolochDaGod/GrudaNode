@@ -1,12 +1,12 @@
 "use strict";
 
 /**
- * Grudge AI Hub client — Gemini 3.5 Flash via ai.grudge-studio.com
+ * Grudge AI Hub client — Gemini via ai.grudge-studio.com
  * Use model prefix "grudge:" or "gemini:" to route chat through the hub.
  */
 
 const HUB_URL = (process.env.GRUDGE_AI_HUB_URL || "https://ai.grudge-studio.com").replace(/\/$/, "");
-const HUB_KEY = process.env.GRUDGE_AI_KEY || process.env.LEGION_HUB_API_KEY || "";
+const HUB_KEY = process.env.GRUDGE_AI_KEY || process.env.LEGION_HUB_API_KEY || process.env.INTERNAL_API_KEY || "";
 
 function isHubModel(model) {
   if (!model) return !!HUB_KEY;
@@ -20,7 +20,7 @@ function hubModelId(model) {
 }
 
 async function hubChat({ messages, message, model, role = "general", systemInstruction, generationConfig, images }) {
-  if (!HUB_KEY) throw new Error("GRUDGE_AI_KEY not configured");
+  if (!HUB_KEY) throw new Error("GRUDGE_AI_KEY not configured — set in .env or use Puter cloud models in the browser");
   const resp = await fetch(`${HUB_URL}/v1/agents/${role}/chat`, {
     method: "POST",
     headers: {
@@ -67,4 +67,4 @@ function listHubModels() {
   ];
 }
 
-module.exports = { HUB_URL, HUB_KEY, isHubModel, hubModelId, hubChat, streamHubChat, listHubModels };
+module.exports = { HUB_URL, isHubModel, hubModelId, hubChat, streamHubChat, listHubModels };

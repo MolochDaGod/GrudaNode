@@ -229,6 +229,14 @@ app.get("/apple-touch-icon.png", (req, res, next) => {
   if (sendPublicAsset(res, "gruda-king.png")) return;
   next();
 });
+app.get("/install-linux.sh", (req, res) => {
+  res.type("application/x-sh");
+  res.sendFile(path.join(PUBLIC_DIR, "install-linux.sh"));
+});
+app.get("/install-windows.bat", (req, res) => {
+  res.type("application/octet-stream");
+  res.sendFile(path.join(PUBLIC_DIR, "install-windows.bat"));
+});
 app.use(express.static(PUBLIC_DIR));
 
 /* ── Uploads (multipart) ─────────────────────────────────────── */
@@ -895,6 +903,7 @@ app.get("/api/health", async (_req, res) => {
   const treaty = !!(treatyWs && treatyWs.readyState === WebSocket.OPEN);
   res.json({
     ok: true, ollama, treaty, grok: grokBuild.hasGrokApi(),
+    grudgeAi: grudgeAiHub.listHubModels().length > 0,
     skills: _bundledSkills.length, serverless: !!process.env.VERCEL,
     db: pgReady, music: !!MUREKA_KEY, voice: !!ELEVEN_KEY,
   });

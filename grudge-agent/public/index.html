@@ -732,13 +732,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
         </div>
 
-        <h3>Desktop Launcher</h3>
-        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">Generate a personalized .bat file you can put on your desktop to launch GRUDA Agent with one click.</div>
+        <h3>Desktop / Linux Install</h3>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
+          One command on Linux: <code style="color:var(--gold)">curl -fsSL https://ai.grudge-studio.com/install-linux.sh | bash</code><br>
+          Or generate a launcher that runs <code>npx gruda-agent</code> (no manual clone required).
+        </div>
         <div class="launcher-row">
           <input id="launcher-name" placeholder="Your name (optional)">
-          <input id="launcher-dir" placeholder="Install folder (e.g. C:\gruda-agent)">
-          <button class="int-btn primary" onclick="downloadLauncher('windows')">⬇ Download .bat</button>
-          <button class="int-btn" onclick="downloadLauncher('linux')">⬇ Download .sh</button>
+          <button class="int-btn primary" onclick="downloadLauncher('windows')">⬇ Windows .bat</button>
+          <button class="int-btn" onclick="downloadLauncher('linux')">⬇ Linux .sh</button>
         </div>
 
         <h3 style="margin-top:14px">Deploy Log</h3>
@@ -2275,15 +2277,13 @@ function deployTo(target){
 /* Desktop launcher — generated fully client-side. */
 function downloadLauncher(osName){
   const name=(document.getElementById("launcher-name")?.value||"").trim();
-  const dir=(document.getElementById("launcher-dir")?.value||"").trim();
+  const label=name?(" for "+name):"";
   let content, filename;
   if(osName==="windows"){
-    const d=dir||"%USERPROFILE%\\gruda-agent";
-    content="@echo off\r\nREM GRUDA Agent launcher"+(name?(" for "+name):"")+"\r\ntitle GRUDA Agent\r\ncd /d \""+d+"\"\r\nstart \"\" http://127.0.0.1:3200\r\nnode server.js\r\npause\r\n";
+    content="@echo off\r\nREM GRUDA Agent launcher"+label+"\r\ntitle GRUDA Agent\r\necho Starting GRUDA Agent...\r\nstart \"\" http://127.0.0.1:3200\r\nnpx --yes gruda-agent@latest --port 3200 --no-open\r\npause\r\n";
     filename="start-gruda-agent.bat";
   } else {
-    const d=dir||"$HOME/gruda-agent";
-    content="#!/bin/sh\n# GRUDA Agent launcher"+(name?(" for "+name):"")+"\ncd \""+d+"\" || exit 1\n(command -v xdg-open >/dev/null 2>&1 && xdg-open http://127.0.0.1:3200) &\nnode server.js\n";
+    content="#!/usr/bin/env bash\n# GRUDA Agent launcher"+label+"\nset -e\nif ! command -v node >/dev/null 2>&1; then echo 'Install Node.js 18+ from https://nodejs.org'; exit 1; fi\n(command -v xdg-open >/dev/null 2>&1 && (sleep 2 && xdg-open http://127.0.0.1:3200) &) || true\nexec npx --yes gruda-agent@latest --port 3200 --no-open\n";
     filename="start-gruda-agent.sh";
   }
   try{
