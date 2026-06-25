@@ -3,3 +3,18 @@ node_modules/
 *.gif
 .gruda-agent/
 .vercel/
+
+# Stray clones / agent session artifacts (not part of this deployment repo)
+Grudge-Studio-Game/
+grudgedot-launcher-temp/
+CoreGRUDA-temp/
+grudge-coregruda/
+grudge-game-core/
+grudge-ui-editor/
+voxel-builder/
+.wrangler/
+terminals/
+.gemini/
+mcps/
+agent-tools/documents-glb-scan.ndjson
+agent-tools/documents-glb-scan.json
