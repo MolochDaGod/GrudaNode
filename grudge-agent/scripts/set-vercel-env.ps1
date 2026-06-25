@@ -1,4 +1,5 @@
 # Sync Grudge fleet secrets to Vercel (grudgenexus team)
+# GRUDA Agent Vercel project: grudaagent only (gruda-agent duplicate removed)
 # Reads canonical .env — never commit secrets into this file.
 param(
     [string]$Scope = "grudgenexus",
@@ -68,7 +69,6 @@ $nexusFull = @(
 
 $projectKeys = [ordered]@{
     "grudaagent"            = $agentFull
-    "gruda-agent"           = $agentFull
     "grudachain"            = $nexusFull
     "grudgecontrol"         = $fleetAi
     "grudge-builder"        = $fleetAi + @("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "INTERNAL_API_KEY")

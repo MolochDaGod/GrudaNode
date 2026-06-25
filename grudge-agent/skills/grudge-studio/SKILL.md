@@ -21,7 +21,7 @@ description: Grudge Studio platform knowledge — repos, deploys, ObjectStore, c
 - ObjectStore API: https://models.grudge-studio.com
 - Fleet topology: https://fleet.grudge-studio.com
 - GSC live: https://grudge-character-creator.vercel.app/game/
-- GRUDA Agent: https://gruda-agent.vercel.app
+- GRUDA Agent: https://grudaagent.vercel.app
 
 ## Agent guidance
 

@@ -5,7 +5,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.0] - 2026-06-17
-Grok Build alignment for cloud agentic actions on gruda-agent.vercel.app.
+Grok Build alignment for cloud agentic actions on grudaagent.vercel.app.
 ### Added
 - **Grok/xAI agent loop** (`lib/grok-build.js`) — tool-using Agent mode on Vercel when `XAI_API_KEY` is set.
 - **Bundled skills** (`skills/design`, `skills/implement`, `skills/grudge-studio`) — Grok Build skills-first pattern.

@@ -4,7 +4,7 @@
 This document explains how the **GrudaNode** repository and the **GRUDA Agent** deployment are organized: where things live, how they connect, how they deploy, and the conventions to follow when contributing.
 - **Repository:** [MolochDaGod/GrudaNode](https://github.com/MolochDaGod/GrudaNode) (default branch `main`)
 - **Owner:** Grudge Studio — RacAlvin The Pirate King
-- **Live (agent):** [gruda-agent.vercel.app](https://gruda-agent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway)
+- **Live (agent):** [grudaagent.vercel.app](https://grudaagent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway)
 ## Repository layout
 `GrudaNode` is a small monorepo with two independently deployable Node services plus shared CI/CD.
 ```
@@ -63,6 +63,15 @@ The single brand asset is `public/gruda-king.png` (the crowned GRUDA king). It r
 - **Inline marks** — onboarding header, sidebar nav, the AI Workspace tab, and the Treaty Chat title (CSS class `.gruda-ico`)
 - **Agent avatar** — the assistant's chat bubble avatar (CSS class `.avatar-img`)
 It is served at the site root (`/gruda-king.png`) by the `vercel.json` static route. **To rebrand:** drop a new square PNG (recommended ≥ 512×512, transparent background) at `public/gruda-king.png` — no code changes needed. Helper CSS lives in the `BRAND ICON` block near the end of the `<style>` section.
+## Naming (one Vercel project)
+| Layer | Canonical name | Notes |
+|---|---|---|
+| **Vercel project** | `grudaagent` | Single production deploy — `gruda-agent` Vercel project was removed (duplicate) |
+| **Vercel URL** | [grudaagent.vercel.app](https://grudaagent.vercel.app) | Also proxied at [ai.grudge-studio.com](https://ai.grudge-studio.com) |
+| **npm package / CLI** | `gruda-agent` | `npx gruda-agent` — hyphen matches npm, not the Vercel slug |
+| **Local data dir** | `~/.gruda-agent` or `%APPDATA%\GrudgeStudio\gruda-agent` | Unchanged |
+| **Railway service** | `gruda-agent` | Full-stack + Postgres |
+
 ## Deployment
 `vercel.json` routing:
 - `/api/(.*)` → `server.js` (serverless function)
@@ -70,7 +79,7 @@ It is served at the site root (`/gruda-king.png`) by the `vercel.json` static ro
 - `/(.*)` → `public/$1` (static files, including `/gruda-king.png` and `/ui-kit/*`)
 | Target | How | URL |
 |---|---|---|
-| **Vercel** | `vercel --prod` from `grudge-agent/`, or the deploy workflow | gruda-agent.vercel.app |
+| **Vercel** | `vercel --prod` from `grudge-agent/`, or the deploy workflow | grudaagent.vercel.app |
 | **Railway** | `Dockerfile` + `railway.toml` (service `gruda-agent`) | grudanode-production.up.railway.app |
 | **Docker** | `docker compose up -d` (agent + Ollama) | localhost:3200 |
 | **npx** | `npx gruda-agent` via `bin/gruda-agent.js` | localhost:3200 |

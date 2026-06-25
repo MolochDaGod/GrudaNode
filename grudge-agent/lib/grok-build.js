@@ -33,7 +33,7 @@ const GRUDGE_STUDIO_RESOURCES = `
 | grudge-builder | grudgewarlords.com owner | Islands, world map, IslandEngine |
 | GSC portal | grudge-character-creator.vercel.app/game/ | Character creator SPA |
 | Fleet map | fleet.grudge-studio.com | Live infra topology |
-| GRUDA Agent | gruda-agent.vercel.app | This workspace |
+| GRUDA Agent | grudaagent.vercel.app | This workspace |
 | GrudaNode | MolochDaGod/GrudaNode | GRUDA Agent source |
 | Identity | id.grudge-studio.com | Grudge ID / accounts |
 

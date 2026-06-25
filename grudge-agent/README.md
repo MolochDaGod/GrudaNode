@@ -8,7 +8,7 @@
 
 **New in v1.1.0:** free Puter cloud models · 🎵 Mureka music · 🗣️ ElevenLabs voice · 🤝 AI worker orchestrator with a shared “truth” store · upload/unzip/convert tools · user rules + vocal commands · ask-when-unsure agent behavior · expanded Postgres persistence.
 
-**▶ Live:** [gruda-agent.vercel.app](https://gruda-agent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway — full stack + Postgres)
+**▶ Live:** [grudaagent.vercel.app](https://grudaagent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway — full stack + Postgres)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/MolochDaGod/GrudaNode)
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MolochDaGod/GrudaNode)
@@ -23,7 +23,7 @@
 | **Local** | ✅ `npx gruda-agent`, Docker, or Docker Compose (with bundled Ollama) |
 | **Cloud chat** | ✅ Free **Puter** models in-browser — no server-side AI keys required |
 | **Railway** | ✅ **Live** — https://grudanode-production.up.railway.app (full stack; Postgres connected) |
-| **Vercel** | ✅ **Live** — https://gruda-agent.vercel.app (UI + serverless API; chat via free Puter models) |
+| **Vercel** | ✅ **Live** — https://grudaagent.vercel.app (UI + serverless API; chat via free Puter models) |
 
 > `MUREKA_API_KEY` / `ELEVENLABS_API_KEY` enable music/voice, and `DATABASE_URL` enables durable Postgres storage. All are optional — features degrade gracefully when unset.
 
@@ -144,7 +144,7 @@ docker run -d \
   grudastudio/gruda-agent:latest
 ```
 
-### ▲ Vercel — [gruda-agent.vercel.app](https://gruda-agent.vercel.app)
+### ▲ Vercel — [grudaagent.vercel.app](https://grudaagent.vercel.app)
 
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MolochDaGod/GrudaNode)
 
