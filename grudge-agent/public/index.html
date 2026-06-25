@@ -18,6 +18,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="/gruda-king.png">
 <script src="https://js.puter.com/v2/" async></script>
+<script src="/local-store.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -176,7 +177,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 #mem-panel.collapsed{width:0;min-width:0;overflow:hidden;}
 .panel-hdr{padding:10px 14px;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:6px;}
 .panel-hdr span{flex:1;}
+.mem-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);}
+.mem-tab{flex:1;padding:7px 4px;font-size:.66rem;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;text-align:center;letter-spacing:.04em;}
+.mem-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.mem-tab:hover:not(.active){color:var(--text);}
 #mem-content{flex:1;overflow-y:auto;padding:12px;font-family:'Consolas',monospace;font-size:.71rem;line-height:1.65;color:var(--muted);white-space:pre-wrap;}
+.mem-insight-pick{display:flex;flex-wrap:wrap;gap:4px;padding:0 10px 8px;}
+.mem-insight-btn{padding:3px 8px;border-radius:12px;border:1px solid var(--border);background:none;color:var(--muted);font-size:.62rem;cursor:pointer;}
+.mem-insight-btn.active,.mem-insight-btn:hover{border-color:var(--accent);color:var(--accent);}
+.mem-local-badge{font-size:.58rem;color:var(--green);letter-spacing:.08em;text-transform:uppercase;}
 .mem-empty{color:var(--muted);font-style:italic;font-family:inherit;font-size:.8rem;}
 
 /* ── INPUT AREA ── */
@@ -408,7 +417,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <div id="ob-result" style="display:none">
           <div class="ob-q" style="color:var(--green)">✓ Your workspace is ready!</div>
           <div style="margin-top:10px;padding:12px;background:var(--surface2);border-radius:6px;font-size:.78rem;line-height:1.6;color:var(--muted);" id="ob-prompt-preview"></div>
-          <div style="margin-top:10px;font-size:.76rem;color:var(--muted)">You can always update this in Settings. Your gruda.md memory starts with your profile.</div>
+          <div style="margin-top:10px;font-size:.76rem;color:var(--muted)">Saved locally in your browser. Insight files grow from every session.</div>
         </div>
       </div>
 
@@ -743,9 +752,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <!-- Memory Panel (right) -->
   <div id="mem-panel">
     <div class="panel-hdr">
-      <span>📝 gruda.md</span>
-      <button onclick="refreshMem()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.78rem">↻</button>
+      <span id="mem-panel-title">📝 Memory</span>
+      <span class="mem-local-badge" id="mem-local-badge" title="Stored in browser IndexedDB">● local</span>
+      <button onclick="refreshMemView()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.78rem">↻</button>
       <button onclick="document.getElementById('mem-panel').classList.toggle('collapsed')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.78rem">✕</button>
+    </div>
+    <div class="mem-tabs">
+      <div class="mem-tab active" id="mem-tab-project" onclick="setMemTab('project')">gruda.md</div>
+      <div class="mem-tab" id="mem-tab-insights" onclick="setMemTab('insights')">Insights</div>
+    </div>
+    <div class="mem-insight-pick" id="mem-insight-pick" style="display:none">
+      <button class="mem-insight-btn active" data-slug="growth" onclick="pickInsight('growth',this)">growth</button>
+      <button class="mem-insight-btn" data-slug="profile" onclick="pickInsight('profile',this)">profile</button>
+      <button class="mem-insight-btn" data-slug="goals" onclick="pickInsight('goals',this)">goals</button>
+      <button class="mem-insight-btn" data-slug="projects" onclick="pickInsight('projects',this)">projects</button>
+      <button class="mem-insight-btn" data-slug="preferences" onclick="pickInsight('preferences',this)">preferences</button>
     </div>
     <div id="mem-content"><span class="mem-empty">Select a project to see its memory</span></div>
   </div>
@@ -778,6 +799,124 @@ let ws           = null;
 let displayName  = "You";
 let obStep       = 1;
 const obSelections = {};
+let memTab = "project";
+let activeInsightSlug = "growth";
+let msgsSinceInsight = 0;
+const INSIGHT_GROW_EVERY = 6;
+
+const LocalSave = {
+  store() { return window.GrudaLocalStore; },
+  enabled() { return !!(this.store() && this.store().available()); },
+
+  async saveConfig(cfg) {
+    if (!this.enabled()) return;
+    try { await this.store().saveConfig(cfg); } catch (e) { console.warn("[local-save] config", e); }
+  },
+
+  async saveInsights(map) {
+    if (!map || !this.enabled()) return;
+    try {
+      await this.store().saveInsightsMap(map);
+      fetch("/api/insights/sync", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ insights: map }) }).catch(()=>{});
+    } catch (e) { console.warn("[local-save] insights", e); }
+  },
+
+  async saveProjectMemory(name, content) {
+    if (!name || !this.enabled()) return;
+    try {
+      await this.store().saveMemory(name, content);
+      fetch(`/api/projects/${encodeURIComponent(name)}/memory`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ content }) }).catch(()=>{});
+    } catch (e) { console.warn("[local-save] memory", e); }
+  },
+
+  async hydrate() {
+    if (!this.enabled()) return null;
+    try {
+      const cfg = await this.store().getConfig();
+      const projects = await this.store().listProjects();
+      const insights = await this.store().getAllInsights();
+      return { cfg, projects, insights };
+    } catch (e) { console.warn("[local-save] hydrate", e); return null; }
+  },
+
+  async appendSession(session) {
+    if (!this.enabled()) return;
+    try { await this.store().appendHistory(session); } catch (e) {}
+    fetch("/api/history", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(session) }).catch(()=>{});
+  },
+};
+
+function setMemTab(tab) {
+  memTab = tab;
+  document.getElementById("mem-tab-project")?.classList.toggle("active", tab === "project");
+  document.getElementById("mem-tab-insights")?.classList.toggle("active", tab === "insights");
+  document.getElementById("mem-insight-pick").style.display = tab === "insights" ? "flex" : "none";
+  document.getElementById("mem-panel-title").textContent = tab === "insights" ? "🧠 User Insights" : "📝 gruda.md";
+  refreshMemView();
+}
+
+function pickInsight(slug, btn) {
+  activeInsightSlug = slug;
+  document.querySelectorAll(".mem-insight-btn").forEach(b => b.classList.toggle("active", b === btn));
+  refreshMemView();
+}
+
+async function refreshMemView() {
+  const el = document.getElementById("mem-content");
+  if (!el) return;
+  if (memTab === "insights") {
+    let content = "";
+    if (LocalSave.enabled()) content = await LocalSave.store().getInsight(activeInsightSlug);
+    if (!content) {
+      try {
+        const d = await fetch(`/api/insights/${activeInsightSlug}`).then(r => r.json());
+        content = d.content || "";
+        if (content && LocalSave.enabled()) await LocalSave.store().saveInsight(activeInsightSlug, content);
+      } catch (e) {}
+    }
+    el.textContent = content || `No ${activeInsightSlug} insights yet — complete onboarding or chat to grow this file.`;
+    return;
+  }
+  await refreshMem();
+}
+
+async function maybeGrowInsights() {
+  msgsSinceInsight += 1;
+  if (msgsSinceInsight < INSIGHT_GROW_EVERY) return;
+  msgsSinceInsight = 0;
+  await growUserInsights();
+}
+
+async function growUserInsights() {
+  if (!messages.length) return;
+  let extracted = null;
+  try {
+    const existing = LocalSave.enabled() ? await LocalSave.store().getInsight("growth") : "";
+    const prompt =
+      "Extract 2-5 durable facts about this user from the conversation. " +
+      "Focus on goals, tools, preferences, recurring topics, decisions. Short bullet points only.\n\n" +
+      (existing ? `Existing (do not repeat):\n${existing.slice(-900)}\n\n` : "") +
+      messages.slice(-10).map(m => `${m.role}: ${String(m.content||"").slice(0,600)}`).join("\n\n");
+    if (typeof puter !== "undefined" && puter.ai) {
+      const resp = await puter.ai.chat([{ role:"user", content: prompt }], { model: "gpt-4o-mini" });
+      extracted = (resp && (resp.message?.content || resp.text)) || null;
+    }
+  } catch (e) { console.warn("[insights] puter extract", e); }
+
+  try {
+    const d = await fetch("/api/insights/grow", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ messages, model: currentModel, extracted }),
+    }).then(r => r.json());
+    if (d.ok && d.growth) {
+      if (LocalSave.enabled()) await LocalSave.store().saveInsight("growth", d.growth);
+      if (memTab === "insights" && activeInsightSlug === "growth") refreshMemView();
+      const cfg = await fetch("/api/config").then(r=>r.json()).catch(()=>({}));
+      window.personaSystem = (cfg.systemPrompt || window.personaSystem || "") +
+        "\n\n## Latest session insights\n" + (d.added || "").slice(0, 800);
+    }
+  } catch (e) { console.warn("[insights] grow", e); }
+}
 
 /* ── SPLASH ── */
 async function initSplash() {
@@ -789,10 +928,13 @@ async function initSplash() {
     if (!splash.gif1&&!splash.gif2) gEl.innerHTML=`<img src="/gruda-king.png" alt="GRUDA Agent" class="splash-logo">`;
   } catch {}
   try {
-    const h = await fetch("/api/history").then(r=>r.json());
-    if (h.sessions?.length) {
+    let sessions = [];
+    if (LocalSave.enabled()) sessions = await LocalSave.store().listHistory();
+    const h = await fetch("/api/history").then(r=>r.json()).catch(()=>({sessions:[]}));
+    if (!sessions.length && h.sessions?.length) sessions = h.sessions;
+    if (sessions?.length) {
       document.getElementById("splash-hist-wrap").style.display="block";
-      h.sessions.slice(0,5).forEach(s=>{
+      sessions.slice(0,5).forEach(s=>{
         const el=document.createElement("div");el.className="hcard";
         el.innerHTML=`<div class="hcard-title">${esc(s.title||"Session")}</div><div class="hcard-meta">${s.project?`📁 ${s.project} · `:""}${fmtDate(s.savedAt)}</div>${s.summary?`<div class="hcard-sum">${esc(s.summary)}</div>`:""}`;
         el.onclick=()=>restoreSession(s);
@@ -808,12 +950,17 @@ document.getElementById("splash-enter").onclick = async () => {
   document.getElementById("splash").classList.add("fade");
   setTimeout(()=>document.getElementById("splash").remove(),800);
   document.getElementById("app").style.display="flex";
-  const ob = await fetch("/api/onboarding").then(r=>r.json()).catch(()=>({complete:true}));
+  let ob = await fetch("/api/onboarding").then(r=>r.json()).catch(()=>({complete:false}));
+  const local = await LocalSave.hydrate();
+  if (local?.cfg?.onboarded) {
+    ob = { complete: true, config: { ...local.cfg, ...(ob.config||{}) } };
+    if (!ob.config.onboarded) ob.complete = true;
+  }
   if (!ob.complete) {
     document.getElementById("onboarding").classList.add("open");
   } else {
-    displayName = ob.config?.displayName || "You";
-    initApp();
+    displayName = ob.config?.displayName || local?.cfg?.displayName || "You";
+    initApp(local);
   }
 };
 
@@ -851,8 +998,27 @@ async function obNext() {
   const models = await fetch("/api/models").then(r=>r.json()).catch(()=>({models:[]}));
   const model = models.models?.[0]?.name || "";
   const data = await fetch("/api/onboarding/complete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({answers,model})}).then(r=>r.json()).catch(()=>({ok:true,systemPrompt:""}));
-  const cfg = { onboarded:true, userName:answers.name, displayName:answers.name, aiName:data.aiName||"GRUDA", systemPrompt:data.systemPrompt||"" };
+  const cfg = { onboarded:true, userName:answers.name, displayName:answers.name, aiName:data.aiName||"GRUDA", systemPrompt:data.systemPrompt||"", answers };
   try { localStorage.setItem("gruda_config", JSON.stringify(cfg)); } catch {}
+  await LocalSave.saveConfig(cfg);
+  if (data.insights) await LocalSave.saveInsights(data.insights);
+  else {
+    const fallback = {
+      profile: `# User Profile\n\n- **Name:** ${answers.name}\n- **Role:** ${answers.role||"—"}\n`,
+      goals: `# Goals\n\n${answers.goals||"_None yet_"}\n`,
+      projects: `# Projects\n\n${answers.projects||"_None yet_"}\n`,
+      preferences: `# Preferences\n\n${answers.preferences||"_None yet_"}\n`,
+      growth: `# Growing User Insights\n\n## Onboarding\n- ${answers.name}: ${answers.role||"role TBD"}\n`,
+    };
+    await LocalSave.saveInsights(fallback);
+  }
+  if (data.defaultProject) {
+    await LocalSave.store()?.saveProject(data.defaultProject);
+    if (LocalSave.enabled()) {
+      const mem = Object.values(data.insights||{}).join("\n\n");
+      await LocalSave.saveProjectMemory(data.defaultProject.name, `# ${answers.name}'s Workspace\n\n${mem}`);
+    }
+  }
   document.getElementById("ob-ai-thinking").style.display="none";
   document.getElementById("ob-result").style.display="block";
   document.getElementById("ob-prompt-preview").textContent = data.systemPrompt || "Your workspace has been configured.";
@@ -860,7 +1026,7 @@ async function obNext() {
   const enterBtn=document.createElement("button");
   enterBtn.className="ob-btn primary";enterBtn.style.marginTop="14px";
   enterBtn.textContent="Enter Workspace →";
-  enterBtn.onclick=()=>{ document.getElementById("onboarding").classList.remove("open"); initApp(); };
+  enterBtn.onclick=async ()=>{ document.getElementById("onboarding").classList.remove("open"); initApp(await LocalSave.hydrate()); };
   document.querySelector(".ob-footer .ob-btns").appendChild(enterBtn);
 }
 function skipOnboarding() {
@@ -883,24 +1049,32 @@ function restoreSession(s) {
 }
 
 /* ── APP INIT ── */
-async function initApp() {
+async function initApp(hydrated) {
+  const localData = hydrated || await LocalSave.hydrate();
   await loadModels();
-  await loadProjects();
+  await loadProjects(localData);
   await checkHealth();
   initWS();
   try {
     let c = {};
     try { c = await fetch("/api/config").then(r=>r.json()); } catch {}
-    const local = JSON.parse(localStorage.getItem("gruda_config") || "{}");
-    c = { ...local, ...c };
-    if (c.onboarded && Object.keys(local).length) {
+    const ls = JSON.parse(localStorage.getItem("gruda_config") || "{}");
+    c = { ...(localData?.cfg||{}), ...ls, ...c };
+    if (c.onboarded) {
+      await LocalSave.saveConfig(c);
       fetch("/api/config", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(c) }).catch(()=>{});
     }
+    if (localData?.insights) await LocalSave.saveInsights(localData.insights);
     window.personaSystem = c.systemPrompt || "";
+    if (localData?.insights) {
+      const insightText = Object.entries(localData.insights).map(([k,v]) => `### ${k}\n${String(v).slice(0,1200)}`).join("\n\n");
+      window.personaSystem += "\n\n## User Insight Files\n" + insightText;
+    }
     window.aiName = c.aiName || "GRUDA";
     window.voiceId = c.voiceId || "";
     if (c.displayName) displayName = c.displayName;
   } catch(e){}
+  setInterval(() => { if (messages.length) growUserInsights(); }, 8 * 60 * 1000);
   try { GrudgeAuth.restore(); } catch(e){}
   if (window.GrudgeFleetConnect) GrudgeFleetConnect.mount("#grudge-fleet-connect");
   setInterval(checkHealth,15000);
@@ -953,11 +1127,28 @@ async function loadModels() {
   sel.value = currentModel;
 }
 
-async function loadProjects() {
+async function loadProjects(localData) {
+  let projects = localData?.projects || [];
   const d=await fetch("/api/projects").then(r=>r.json()).catch(()=>({projects:[]}));
+  const serverProjects = d.projects || [];
+  const byName = {};
+  for (const p of projects) byName[p.name] = p;
+  for (const p of serverProjects) {
+    if (!byName[p.name]) byName[p.name] = p;
+    if (LocalSave.enabled() && p.hasMemory) {
+      try {
+        const mem = await fetch(`/api/projects/${encodeURIComponent(p.name)}/memory`).then(r=>r.json());
+        if (mem.content) await LocalSave.store().saveMemory(p.name, mem.content);
+      } catch (e) {}
+    }
+  }
+  projects = Object.values(byName);
+  if (LocalSave.enabled()) {
+    for (const p of projects) await LocalSave.store().saveProject(p);
+  }
   const list=document.getElementById("proj-list");
   list.innerHTML="";
-  (d.projects||[]).forEach(p=>{
+  projects.forEach(p=>{
     const el=document.createElement("div");el.className="proj-item"+(activeProj?.name===p.name?" active":"");
     el.id="pj-"+p.name;el.innerHTML=`<div class="proj-dot"></div>${esc(p.name)}`;
     el.onclick=()=>selectProj(p);list.appendChild(el);
@@ -974,9 +1165,15 @@ async function selectProj(p) {
 
 async function refreshMem() {
   if (!activeProj) return;
-  const d=await fetch(`/api/projects/${encodeURIComponent(activeProj.name)}/memory`).then(r=>r.json()).catch(()=>({content:""}));
+  let content = "";
+  if (LocalSave.enabled()) content = await LocalSave.store().getMemory(activeProj.name);
+  if (!content) {
+    const d=await fetch(`/api/projects/${encodeURIComponent(activeProj.name)}/memory`).then(r=>r.json()).catch(()=>({content:""}));
+    content = d.content || "";
+    if (content && LocalSave.enabled()) await LocalSave.store().saveMemory(activeProj.name, content);
+  }
   const el=document.getElementById("mem-content");
-  if (d.content) el.textContent=d.content;
+  if (content) el.textContent=content;
   else el.innerHTML=`<span class="mem-empty">gruda.md is empty — ask the agent to start one</span>`;
 }
 
@@ -1725,6 +1922,10 @@ async function runChat() {
   bodyEl.innerHTML=mdToHtml(full);lastResp=full;messages.push({role:"assistant",content:full});
   if(window.autoSpeak && full) speak(full);
   isStreaming=false;setSend(false);scrollBot();
+  maybeGrowInsights();
+  if (messages.length >= 4) {
+    LocalSave.appendSession({ title: messages[0]?.content?.slice(0,60)||"Chat", project: activeProj?.name||"", summary: full.slice(0,200), messages: [...messages] });
+  }
 }
 
 /* ── AGENT STREAM ── */
@@ -1755,8 +1956,16 @@ async function runAgent() {
       }
     }
     if(full) messages.push({role:"assistant",content:full});
+    if (activeProj && LocalSave.enabled()) {
+      const mem = await LocalSave.store().getMemory(activeProj.name);
+      if (mem) await LocalSave.saveProjectMemory(activeProj.name, mem);
+    }
   } catch(e){ addErr(bodyEl,"Agent error: "+e.message); }
   isStreaming=false; setSend(false); scrollBot();
+  maybeGrowInsights();
+  if (messages.length >= 4) {
+    LocalSave.appendSession({ title: messages[0]?.content?.slice(0,60)||"Agent", project: activeProj?.name||"", summary: (full||"").slice(0,200), messages: [...messages] });
+  }
 }
 
 function addThink(msg){ const el=document.createElement("div"); el.className="thinking"; el.innerHTML=`<div class="dots"><span></span><span></span><span></span></div> ${esc(msg)}`; document.getElementById("msgs").appendChild(el); scrollBot(); return el; }
@@ -1986,10 +2195,15 @@ async function createProj(){
   const name=((inp&&inp.value)||"").trim();
   if(!name) return;
   try{
-    const d=await fetch("/api/projects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})}).then(r=>r.json());
+    const d=await fetch("/api/projects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})}).then(r=>r.json()).catch(()=>({name, path:""}));
+    const proj = { name: d.name || name, path: d.path || "" };
+    if (LocalSave.enabled()) {
+      await LocalSave.store().saveProject(proj);
+      await LocalSave.saveProjectMemory(proj.name, `# ${name}\n\nCreated: ${new Date().toISOString()}\n\n## Notes\n\n`);
+    }
     document.getElementById("new-proj-modal")?.classList.remove("open");
-    await loadProjects();
-    if(d&&d.name) await selectProj({name:d.name, path:d.path||""});
+    await loadProjects(await LocalSave.hydrate());
+    await selectProj(proj);
   }catch(e){ alert("Could not create project: "+e.message); }
 }
 

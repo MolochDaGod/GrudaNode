@@ -28,6 +28,7 @@ const grokBuild = require("./lib/grok-build");
 const grudgeAiHub = require("./lib/grudgeAiHub");
 const anythingllm = require("./lib/anythingllm");
 const fleetMismatch = require("./lib/fleet-mismatch");
+const userInsights = require("./lib/user-insights");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -68,9 +69,11 @@ const XAI_KEY = process.env.XAI_API_KEY || "";
 const DATA_DIR     = process.env.DATA_DIR || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), ".gruda-agent");
 const CONFIG_FILE  = path.join(DATA_DIR, "config.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
+const INSIGHTS_DIR = path.join(DATA_DIR, "insights");
 // Best-effort: serverless hosts (Vercel) only allow writes under /tmp
 try { fs.mkdirSync(PROJECTS_DIR, { recursive: true }); } catch {}
 try { fs.mkdirSync(DATA_DIR,     { recursive: true }); } catch {}
+try { fs.mkdirSync(INSIGHTS_DIR, { recursive: true }); } catch {}
 
 /* ── Config helpers ──────────────────────────────────────────── */
 function loadConfig() {
@@ -97,13 +100,74 @@ function appendSession(s) {
   ).catch(()=>{});
 }
 
+/* ── User insight files (onboarding + growing session memory) ─── */
+function loadInsightMap() {
+  const map = {};
+  for (const slug of userInsights.INSIGHT_SLUGS) {
+    const fp = path.join(INSIGHTS_DIR, userInsights.slugToFile(slug));
+    if (fs.existsSync(fp)) map[slug] = fs.readFileSync(fp, "utf8");
+  }
+  return map;
+}
+
+function saveInsightFile(slug, content) {
+  fs.mkdirSync(INSIGHTS_DIR, { recursive: true });
+  const fp = path.join(INSIGHTS_DIR, userInsights.slugToFile(slug));
+  fs.writeFileSync(fp, content || "", "utf8");
+  pgUpsertInsight(slug, content);
+  return fp;
+}
+
+function writeInsightFiles(files) {
+  const written = {};
+  for (const [slug, content] of Object.entries(files || {})) {
+    written[slug] = saveInsightFile(slug, content);
+  }
+  return written;
+}
+
+async function llmInsightExtract(prompt, model) {
+  if (grokBuild.hasGrokApi()) {
+    const r = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${XAI_KEY}` },
+      body: JSON.stringify({
+        model: grokBuild.isGrokModel(model) ? model.replace(/^grok:/, "") : "grok-3-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 500,
+        temperature: 0.3,
+      }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const text = d.choices?.[0]?.message?.content?.trim();
+      if (text) return text;
+    }
+  }
+  try {
+    const r = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: model || DEFAULT_MODEL, prompt, stream: false }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.response?.trim()) return d.response.trim();
+    }
+  } catch {}
+  return null;
+}
+
 /* ── Persona / system prompt builder ───────────────────────────── */
 // Weaves the user's chosen AI name, generated persona, custom talk commands,
-// and project memory into one system prompt. Used by both agent and chat.
-function buildPersona(cfg, memory, systemExtra) {
+// project memory, and user insight files into one system prompt.
+function buildPersona(cfg, memory, systemExtra, insightMap) {
   const aiName = (cfg && cfg.aiName) || "GRUDA Agent";
   const cmds  = (cfg && Array.isArray(cfg.talkCommands)) ? cfg.talkCommands.filter(c => c && c.phrase) : [];
   const rules = (cfg && Array.isArray(cfg.rules)) ? cfg.rules.filter(Boolean) : [];
+  const insights = userInsights.compileInsightsForPrompt(insightMap || loadInsightMap());
   const base = (
     `You are ${aiName}, a personal agentic AI built on GRUDA Agent by Grudge Studio (RacAlvin The Pirate King). ` +
     `You align with Grok Build patterns: skills-first workflows, plan-before-act, tool-call discipline, and gruda.md memory.\n` +
@@ -112,8 +176,10 @@ function buildPersona(cfg, memory, systemExtra) {
     `- If a request is ambiguous or could be done multiple meaningfully different ways, ASK ONE concise clarifying question before acting.\n` +
     `- Prefer doing over describing: when asked to build/create/deploy, use your tools.\n` +
     `- Save important context to gruda.md — long-term memory.\n` +
+    `- When you learn durable facts about the user, note them for user-insights growth.\n` +
     `- Slash-style intents: /design (architecture doc), /implement (build+review), grudge-studio (platform context).\n\n` +
     ((cfg && cfg.systemPrompt) ? `## Who you're helping\n${cfg.systemPrompt}\n\n` : "") +
+    (insights ? `## User Insight Files\n${insights}\n\n` : "") +
     (rules.length ? `## User rules (always follow)\n` + rules.map(r => `- ${r}`).join("\n") + `\n\n` : "") +
     (cmds.length ? `## Custom talk / vocal commands the user may type or say\n` + cmds.map(c => `- "${c.phrase}" → ${c.action || c.prompt || "custom action"}`).join("\n") + `\n\n` : "") +
     (memory ? `## Project Memory (gruda.md)\n${memory}\n\n` : "No project memory yet.\n\n") +
@@ -563,6 +629,17 @@ app.post("/api/onboarding/complete", async (req, res) => {
   }
   mem += `\n## Generated Persona\n${systemPrompt}\n`;
 
+  const flatAnswers = answers || {
+    name, role: items.find(i => /role|craft/i.test(i.question))?.answer || "",
+    goals: items.find(i => /goal|hoping/i.test(i.question))?.answer || "",
+    projects: items.find(i => /project/i.test(i.question))?.answer || "",
+    preferences: items.find(i => /preference/i.test(i.question))?.answer || "",
+  };
+  const { files: insightFiles } = userInsights.buildInsightFilesFromAnswers(flatAnswers, { aiName: aiN });
+  writeInsightFiles(insightFiles);
+  mem += `\n## User Insight Files\n` +
+    userInsights.INSIGHT_SLUGS.map(s => `- **${userInsights.slugToFile(s)}** — saved locally`).join("\n") + "\n";
+
   const projName = (name.replace(/[^a-z0-9_\- ]/gi,"").replace(/\s+/g, "-") || "My") + "-workspace";
   const projPath = path.join(PROJECTS_DIR, projName);
   fs.mkdirSync(projPath, { recursive: true });
@@ -571,7 +648,11 @@ app.post("/api/onboarding/complete", async (req, res) => {
   pgUpsertMemory(projName, mem);
   pgUpsertOnboarding(cfg);
 
-  res.json({ ok:true, aiName:aiN, systemPrompt, defaultProject:{ name:projName, path:projPath } });
+  res.json({
+    ok: true, aiName: aiN, systemPrompt,
+    defaultProject: { name: projName, path: projPath },
+    insights: insightFiles,
+  });
 });
 
 /* ── Models ──────────────────────────────────────────────────── */
@@ -685,6 +766,56 @@ app.post("/api/projects/:name/memory", (req, res) => {
   pgUpsertProject(safe);
   pgUpsertMemory(safe, content);
   res.json({ ok:true });
+});
+
+/* ── User insight files ──────────────────────────────────────── */
+app.get("/api/insights", (_req, res) => {
+  const map = loadInsightMap();
+  const files = userInsights.INSIGHT_SLUGS.map(slug => ({
+    slug,
+    file: userInsights.slugToFile(slug),
+    content: map[slug] || "",
+    hasContent: !!(map[slug] && map[slug].trim()),
+  }));
+  res.json({ insights: files, dir: INSIGHTS_DIR, slugs: userInsights.INSIGHT_SLUGS });
+});
+
+app.get("/api/insights/:slug", (req, res) => {
+  const slug = req.params.slug.replace(/[^a-z0-9_-]/gi, "");
+  if (!userInsights.INSIGHT_SLUGS.includes(slug)) return res.status(404).json({ error: "unknown insight slug" });
+  const fp = path.join(INSIGHTS_DIR, userInsights.slugToFile(slug));
+  res.json({ slug, file: userInsights.slugToFile(slug), content: fs.existsSync(fp) ? fs.readFileSync(fp, "utf8") : "" });
+});
+
+app.post("/api/insights/:slug", (req, res) => {
+  const slug = req.params.slug.replace(/[^a-z0-9_-]/gi, "");
+  if (!userInsights.INSIGHT_SLUGS.includes(slug)) return res.status(404).json({ error: "unknown insight slug" });
+  const content = req.body.content || "";
+  saveInsightFile(slug, content);
+  res.json({ ok: true, slug, file: userInsights.slugToFile(slug) });
+});
+
+app.post("/api/insights/sync", (req, res) => {
+  const { insights } = req.body || {};
+  if (!insights || typeof insights !== "object") return res.status(400).json({ error: "insights object required" });
+  writeInsightFiles(insights);
+  res.json({ ok: true, slugs: Object.keys(insights) });
+});
+
+app.post("/api/insights/grow", async (req, res) => {
+  const { messages, model, extracted } = req.body || {};
+  const growthPath = path.join(INSIGHTS_DIR, userInsights.slugToFile("growth"));
+  const existing = fs.existsSync(growthPath) ? fs.readFileSync(growthPath, "utf8") : "";
+
+  let block = (extracted && String(extracted).trim()) || null;
+  if (!block && Array.isArray(messages) && messages.length) {
+    block = await llmInsightExtract(userInsights.buildGrowthPrompt(messages, existing), model);
+  }
+  if (!block) return res.json({ ok: false, reason: "no insights extracted", growth: existing });
+
+  const updated = userInsights.appendGrowthInsight(existing, block);
+  saveInsightFile("growth", updated);
+  res.json({ ok: true, added: block, growth: updated });
 });
 
 /* ── History ─────────────────────────────────────────────────── */
@@ -1367,6 +1498,9 @@ async function pgInit() {
         id INT PRIMARY KEY DEFAULT 1, user_name TEXT, ai_name TEXT, voice_id TEXT,
         talk_commands JSONB, answers JSONB, system_prompt TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS gruda_insights (
+        slug TEXT PRIMARY KEY, content TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS gruda_music (
         id SERIAL PRIMARY KEY, kind TEXT, task_id TEXT, prompt TEXT, lyrics TEXT,
         model TEXT, status TEXT, result JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
@@ -1391,6 +1525,12 @@ async function pgHydrate() {
       fs.mkdirSync(pdir, { recursive: true });
       const mp = path.join(pdir, "gruda.md");
       if (!fs.existsSync(mp)) fs.writeFileSync(mp, row.content || "", "utf8");
+    }
+    const ins = await pgPool.query("SELECT slug, content FROM gruda_insights");
+    fs.mkdirSync(INSIGHTS_DIR, { recursive: true });
+    for (const row of ins.rows) {
+      const fp = path.join(INSIGHTS_DIR, userInsights.slugToFile(row.slug));
+      if (!fs.existsSync(fp)) fs.writeFileSync(fp, row.content || "", "utf8");
     }
   } catch (e) { console.warn("[gruda] hydrate failed:", e.message); }
 }
@@ -1421,6 +1561,13 @@ function pgUpsertOnboarding(cfg) {
      VALUES (1,$1,$2,$3,$4,$5,$6,NOW())
      ON CONFLICT (id) DO UPDATE SET user_name=$1, ai_name=$2, voice_id=$3, talk_commands=$4, answers=$5, system_prompt=$6, updated_at=NOW()`,
     [cfg.userName||null, cfg.aiName||null, cfg.voiceId||null, JSON.stringify(cfg.talkCommands||[]), JSON.stringify(cfg.answers||[]), cfg.systemPrompt||null]
+  ).catch(()=>{});
+}
+function pgUpsertInsight(slug, content) {
+  if (!pgReady) return;
+  pgPool.query(
+    "INSERT INTO gruda_insights (slug,content,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (slug) DO UPDATE SET content=$2, updated_at=NOW()",
+    [slug, content || ""]
   ).catch(()=>{});
 }
 function pgSaveMusic(rec) {
