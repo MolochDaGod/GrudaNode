@@ -32,6 +32,7 @@ const userInsights = require("./lib/user-insights");
 const treatyChat = require("./lib/treaty-chat");
 const orchestratorHub = require("./lib/orchestrator-hub");
 const { createLlmRouter } = require("./lib/llm-router");
+const projectTemplates = require("./lib/project-templates");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -850,17 +851,31 @@ app.get("/api/projects", (_req, res) => {
   res.json({ projects, dir:PROJECTS_DIR });
 });
 
+app.get("/api/projects/templates", (_req, res) => {
+  res.json({ templates: projectTemplates.listTemplates() });
+});
+
 app.post("/api/projects", (req, res) => {
-  const { name } = req.body;
+  const { name, template = "blank" } = req.body;
   if (!name) return res.status(400).json({ error:"name required" });
   const p = path.join(PROJECTS_DIR, name.replace(/[^a-z0-9_\-. ]/gi,"_"));
   fs.mkdirSync(p, { recursive:true });
   const safeName = path.basename(p);
   const mem = path.join(p,"gruda.md");
-  if (!fs.existsSync(mem)) fs.writeFileSync(mem, `# ${name}\n\nCreated: ${new Date().toISOString()}\n\n## Notes\n\n`,"utf8");
+  if (!fs.existsSync(mem)) {
+    fs.writeFileSync(mem, projectTemplates.GRUDA_MD(name), "utf8");
+  }
+  const { files, template: applied } = projectTemplates.getTemplateFiles(template, safeName);
+  const written = [];
+  for (const [rel, content] of Object.entries(files)) {
+    const fp = path.join(p, rel.replace(/\\/g, "/"));
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+    fs.writeFileSync(fp, content, "utf8");
+    written.push(rel);
+  }
   pgUpsertProject(safeName);
   pgUpsertMemory(safeName, fs.readFileSync(mem, "utf8"));
-  res.json({ ok:true, name, path:p });
+  res.json({ ok:true, name: safeName, path:p, template: applied, files: written });
 });
 
 app.get("/api/projects/:name/memory", (req, res) => {
@@ -1137,6 +1152,12 @@ function safeProjectPath(rel) {
 
 /* ── Run code (Node.js sandbox) ──────────────────────────────── */
 app.post("/api/ide/run", (req, res) => {
+  if (process.env.VERCEL) {
+    return res.status(503).json({
+      error: "Node runner is not available on the cloud host. Use Environment → Three.js/Phaser in the browser, or run `npx gruda-agent` locally for Node/terminal.",
+      vercel: true,
+    });
+  }
   let { code, path: filePath, lang = "javascript" } = req.body;
   if (!code && filePath) {
     const safe = safeProjectPath(filePath);

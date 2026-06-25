@@ -29,6 +29,7 @@
 <script src="/auto-mode.js"></script>
 <script src="/terminal-panel.js"></script>
 <script src="/orchestrator-panel.js"></script>
+<script src="/asset-viewer.js"></script>
 <script src="/ollama-client.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
@@ -304,6 +305,37 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .asset-dl-btn{display:inline-block;padding:3px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer;text-decoration:none;transition:opacity .15s;}
 .asset-dl-btn:hover{opacity:.85;}
 .asset-loading{grid-column:1/-1;text-align:center;color:var(--muted);font-size:.8rem;padding:40px 0;}
+#assets-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
+#asset-grid{flex:1;min-width:0;}
+#asset-preview{width:min(42%,420px);min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--sidebar);}
+.asset-preview-hdr{padding:8px 12px;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;justify-content:space-between;}
+.asset-preview-body{flex:1;position:relative;min-height:200px;overflow:hidden;}
+.asset-preview-body .viewer-canvas,.asset-preview-body .viewer-image{width:100%;height:100%;object-fit:contain;display:block;}
+.asset-preview-body .viewer-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.78rem;padding:16px;text-align:center;}
+.asset-preview-actions{padding:8px 10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;}
+.asset-preview-meta{font-size:.68rem;color:var(--muted);padding:0 10px 8px;word-break:break-all;line-height:1.4;}
+.asset-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px rgba(255,107,0,.25);}
+.viewer-modal{position:fixed;inset:0;z-index:1100;display:none;align-items:center;justify-content:center;}
+.viewer-modal.open{display:flex;}
+.viewer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.82);}
+.viewer-panel{position:relative;z-index:1;width:min(92vw,900px);height:min(82vh,640px);background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;}
+.viewer-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);}
+.viewer-title{font-weight:700;font-size:.88rem;flex:1;}
+.viewer-actions{display:flex;gap:6px;}
+.viewer-btn{padding:4px 10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:6px;font-size:.72rem;cursor:pointer;}
+.viewer-btn:hover{border-color:var(--accent);color:var(--accent);}
+.viewer-close{font-size:.85rem;}
+.viewer-body{flex:1;position:relative;min-height:0;background:#0a0a12;}
+.viewer-body .viewer-canvas,.viewer-body .viewer-image{width:100%;height:100%;object-fit:contain;}
+.viewer-foot{padding:6px 14px;font-size:.68rem;color:var(--muted);border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.proj-template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;}
+.proj-tpl{padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--surface2);transition:border-color .15s;}
+.proj-tpl:hover,.proj-tpl.sel{border-color:var(--accent);background:rgba(255,107,0,.06);}
+.proj-tpl-name{font-size:.82rem;font-weight:700;margin-bottom:3px;}
+.proj-tpl-desc{font-size:.7rem;color:var(--muted);line-height:1.4;}
+.fleet-strip{font-size:.65rem;color:var(--muted);line-height:1.45;padding-top:4px;border-top:1px dashed var(--border);margin-top:4px;}
+.fleet-strip a{color:var(--gold);text-decoration:none;}
+.fleet-strip a:hover{text-decoration:underline;}
 
 /* ── CLOUD TAB ── */
 .cloud-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;max-width:860px;margin:0 auto;width:100%;}
@@ -528,7 +560,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <div id="login-chip" class="login-chip"></div>
       <div class="sdot"><div class="dot" id="d-grok"></div>Grok</div>
       <div class="sdot"><div class="dot" id="d-ollama"></div>Ollama</div>
+      <div class="sdot"><div class="dot" id="d-node" title="Node runner (local agent)"></div>Node</div>
       <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
+      <div class="fleet-strip" id="fleet-strip">Fleet: <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a></div>
     </div>
   </div>
 
@@ -642,6 +676,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
             <button class="env-btn" onclick="envGenerate()" title="Generate a scene with the selected AI model">🤖 Generate</button>
             <select id="env-scene-list" onchange="envLoadSelected(this.value)" style="display:none"></select>
             <button class="env-btn" onclick="envSave()">💾 Save</button>
+            <button class="env-btn" id="env-to-ide-btn" onclick="envSaveToIde()" title="Save Node script to project and open IDE" style="display:none">📂 IDE</button>
             <span id="env-status" class="env-status"></span>
           </div>
           <div id="env-editor"></div>
@@ -673,8 +708,23 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           <option value="hdri">HDRIs</option>
         </select>
         <input id="asset-search" placeholder="Search assets…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter')loadAssets()">
+        <button class="env-btn" onclick="GrudaViewer.open({modal:true,...(_previewAsset||{})})" id="asset-fullscreen-btn" style="display:none" title="Fullscreen preview">⤢</button>
       </div>
-      <div id="asset-grid"><div class="asset-loading">Loading assets…</div></div>
+      <div id="assets-wrap">
+        <div id="asset-grid"><div class="asset-loading">Loading assets…</div></div>
+        <div id="asset-preview">
+          <div class="asset-preview-hdr"><span>Preview</span><span id="asset-preview-type"></span></div>
+          <div class="asset-preview-body" id="asset-preview-body">
+            <div class="viewer-placeholder">Click an asset to preview — 3D models and images open here</div>
+          </div>
+          <div class="asset-preview-actions" id="asset-preview-actions" style="display:none">
+            <button class="asset-dl-btn" onclick="previewOpenEnv()">▶ Environment</button>
+            <button class="asset-dl-btn" style="background:var(--surface2);color:var(--text)" onclick="previewOpenModal()">⤢ Expand</button>
+            <button class="asset-dl-btn" style="background:var(--surface2);color:var(--text)" onclick="previewCopyUrl()">Copy URL</button>
+          </div>
+          <div class="asset-preview-meta" id="asset-preview-meta"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Orchestrator Tab -->
@@ -923,9 +973,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <!-- New Project Modal -->
 <div class="modal-bg" id="new-proj-modal">
-  <div class="modal">
+  <div class="modal" style="width:520px;max-width:95vw">
     <h3>New Project</h3>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">Pick a boilerplate — files scaffold on the server and sync to your workspace.</p>
     <input type="text" id="new-proj-name" placeholder="Project name…" onkeydown="if(event.key==='Enter')createProj()">
+    <div class="proj-template-grid" id="proj-template-grid"></div>
     <div class="modal-btns">
       <button class="mb" onclick="document.getElementById('new-proj-modal').classList.remove('open')">Cancel</button>
       <button class="mb primary" onclick="createProj()">Create →</button>
@@ -1234,6 +1286,10 @@ async function initApp(hydrated) {
   setInterval(() => { if (messages.length) growUserInsights(); }, 8 * 60 * 1000);
   try { GrudgeAuth.restore(); } catch(e){}
   if (window.GrudgeFleetConnect) GrudgeFleetConnect.mount("#grudge-fleet-connect");
+  try {
+    GrudaViewer.bindModalActions((key) => envUseAsset(key));
+    loadProjectTemplates();
+  } catch (e) {}
   setInterval(checkHealth,15000);
   try { GrudaPwa?.updateInstallUI?.(); } catch(e){}
   const params = new URLSearchParams(location.search);
@@ -1369,10 +1425,15 @@ async function checkHealth() {
   const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:true,grok:false}));
   const client = await probeClientOllama();
   const ollamaOn = !!h.ollama || !!client.ok;
+  const nodeOn = !h.serverless;
   document.getElementById("d-grok")?.classList.toggle("on", !!h.grok);
   document.getElementById("d-ollama")?.classList.toggle("on", ollamaOn);
   document.getElementById("d-treaty")?.classList.toggle("on", !!h.treaty);
+  document.getElementById("d-node")?.classList.toggle("on", nodeOn);
+  window._nodeRunner = nodeOn;
   window._hasGrok = !!h.grok;
+  const fs = document.getElementById("fleet-strip");
+  if (fs && h.grudgeAi) fs.innerHTML = 'Fleet: <span style="color:var(--green)">AI hub ✓</span> · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>';
 }
 
 /* ── TREATY CHAT (light account rooms) ── */
@@ -1630,17 +1691,19 @@ async function saveFile(){
 }
 
 async function runCode(){
-  if(!activeFile||!monacoEditor) return;
+  if(!monacoEditor) return;
   const out=document.getElementById('ide-output');
   out.innerHTML='<span class="out-sys">Running…</span>';
-  await saveFile();
+  GrudaTerminal.showTab('output');
+  if(activeFile) await saveFile();
   const res=await fetch('/api/ide/run',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({code:monacoEditor.getValue(), lang:document.getElementById('ide-lang')?.textContent||'javascript'})});
+    body:JSON.stringify({code:monacoEditor.getValue(), path:activeFile||undefined, lang:document.getElementById('ide-lang')?.textContent||'javascript'})});
   const data=await res.json();
   const safeOut=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   let html=(data.stdout?safeOut(data.stdout):'')+(data.stderr?'<span class="out-err">'+safeOut(data.stderr)+'</span>':'');
   if(data.error) html+='<span class="out-err">'+safeOut(data.error)+'</span>';
   out.innerHTML=html||'<span class="out-sys">// No output</span>';
+  document.getElementById('ide-status').textContent=data.vercel?'Node runner unavailable on cloud':(data.ok!==false?'Ran ✓':'Run finished');
 }
 
 async function generateSnippet(){
@@ -1667,7 +1730,7 @@ async function generateSnippet(){
 /* ══════════════════════════════════════════════════════════
    ASSET BROWSER — Poly Haven · Poly Pizza · Grudge Studio
 ══════════════════════════════════════════════════════════ */
-let _assetSource='polyhaven', _searchTimer=null, _ppKey='';
+let _assetSource='polyhaven', _searchTimer=null, _ppKey='', _previewAsset=null, _selectedTemplate='three-scene';
 
 function setAssetSource(src){
   _assetSource=src;
@@ -1747,24 +1810,32 @@ function renderPolyHavenCard(a){
   card.className='asset-card';
   const thumb=`https://cdn.polyhaven.com/asset_img/thumbs/${a.slug}.png?width=200&height=200`;
   const fallback='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23222" width="200" height="200"/><text x="50%" y="50%" fill="%23555" text-anchor="middle" dy=".3em">No image</text></svg>';
+  const slug=esc(a.slug);
   card.innerHTML=`<img src="${thumb}" onerror="this.src='${fallback}'" loading="lazy">
     <div class="asset-card-info">
       <div class="asset-card-name">${a.name||a.slug}</div>
       <div class="asset-card-type">${a.type||'model'}</div>
-      <button onclick="downloadPolyHaven('${a.slug}')" class="asset-dl-btn">⬇ Download</button>
+      <button onclick="event.stopPropagation();previewPolyHaven('${slug}')" class="asset-dl-btn" style="background:var(--surface2);color:var(--text)">👁 View</button>
+      <button onclick="event.stopPropagation();downloadPolyHaven('${slug}')" class="asset-dl-btn">⬇</button>
     </div>`;
+  card.onclick=()=>previewPolyHaven(a.slug);
   return card;
 }
 
 function renderPolyPizzaCard(a){
   const card=document.createElement('div');
   card.className='asset-card';
+  const url=a.download||a.url||'';
+  const meta={ name:a.name, url, kind:'model' };
   card.innerHTML=`<img src="${a.thumbnail||''}" onerror="this.style.display='none'" loading="lazy">
     <div class="asset-card-info">
       <div class="asset-card-name">${a.name}</div>
       <div class="asset-card-type">Poly Pizza</div>
-      <a href="${a.download||a.url||'#'}" target="_blank" class="asset-dl-btn">⬇ Download</a>
+      <button class="asset-dl-btn asset-view-btn" style="background:var(--surface2);color:var(--text)">👁</button>
+      <a href="${url}" target="_blank" onclick="event.stopPropagation()" class="asset-dl-btn">⬇</a>
     </div>`;
+  card.querySelector('.asset-view-btn').onclick=(e)=>{ e.stopPropagation(); previewAsset(meta); };
+  card.onclick=()=>previewAsset(meta);
   return card;
 }
 
@@ -1772,14 +1843,58 @@ function renderGrudgeCard(a){
   const card=document.createElement('div');
   card.className='asset-card';
   const k=(a.r2Key||'').replace(/'/g,"\\'");
-  const useEnv=a.r2Key?`<button class="asset-dl-btn" style="margin-left:4px" onclick="envUseAsset('${k}')">▶ Env</button>`:'';
+  const kind=(a.type||a.category||'model').toLowerCase();
+  const useEnv=a.r2Key?`<button class="asset-dl-btn" style="margin-left:4px" onclick="event.stopPropagation();envUseAsset('${k}')">▶ Env</button>`:'';
   card.innerHTML=`<img src="${a.thumbnail||''}" onerror="this.style.display='none'" loading="lazy">
     <div class="asset-card-info">
       <div class="asset-card-name">${a.name}</div>
       <div class="asset-card-type">${a.type||a.category||'asset'}</div>
-      ${a.url?`<a href="${a.url}" target="_blank" class="asset-dl-btn">⬇ Use</a>`:''}${useEnv}
+      <button class="asset-dl-btn asset-view-btn" style="background:var(--surface2);color:var(--text)">👁</button>
+      ${a.url?`<a href="${a.url}" target="_blank" onclick="event.stopPropagation()" class="asset-dl-btn">⬇</a>`:''}${useEnv}
     </div>`;
+  card.querySelector('.asset-view-btn').onclick=(e)=>{ e.stopPropagation(); previewGrudgeAsset(a); };
+  card.onclick=()=>previewGrudgeAsset(a);
   return card;
+}
+
+function previewGrudgeAsset(a){
+  const kind=(a.type||a.category||'model').toLowerCase();
+  const url=a.url|| (a.r2Key ? (location.origin+'/api/r2/'+a.r2Key.replace(/^\//,'')) : '');
+  previewAsset({ name:a.name, url, kind, r2Key:a.r2Key, thumbnail:a.thumbnail });
+}
+
+async function previewPolyHaven(slug){
+  const res=await fetch('/api/assets/polyhaven/'+encodeURIComponent(slug));
+  const data=await res.json();
+  if(data.error){ alert(data.error); return; }
+  const type=document.getElementById('asset-type')?.value||'model';
+  const thumb=`https://cdn.polyhaven.com/asset_img/thumbs/${slug}.png?width=800`;
+  if(type==='texture'||type==='hdri'){
+    previewAsset({ name:slug, url:thumb, kind:type });
+    return;
+  }
+  const url=data.gltf||data.fbx;
+  if(url) previewAsset({ name:slug, url, kind:'model' });
+  else previewAsset({ name:slug, url:thumb, kind:'image' });
+}
+
+function previewAsset(opts){
+  _previewAsset=opts;
+  document.querySelectorAll('.asset-card.selected').forEach(c=>c.classList.remove('selected'));
+  const body=document.getElementById('asset-preview-body');
+  if(!body) return;
+  body.innerHTML='<div class="viewer-canvas" style="display:none"></div><img class="viewer-image" alt="" style="display:none"><div class="viewer-placeholder" style="display:none"></div>';
+  GrudaViewer.openInline(body, opts);
+  document.getElementById('asset-preview-type').textContent=opts.kind||'';
+  document.getElementById('asset-preview-meta').textContent=opts.url||'';
+  document.getElementById('asset-preview-actions').style.display='flex';
+  document.getElementById('asset-fullscreen-btn').style.display='';
+}
+function previewOpenModal(){ if(_previewAsset) GrudaViewer.open({ ..._previewAsset, modal:true }); }
+function previewOpenEnv(){ if(_previewAsset?.r2Key) envUseAsset(_previewAsset.r2Key); }
+async function previewCopyUrl(){
+  if(!_previewAsset?.url) return;
+  try{ await navigator.clipboard.writeText(_previewAsset.url); document.getElementById('asset-preview-meta').textContent='URL copied'; }catch(e){}
 }
 
 async function downloadPolyHaven(slug){
@@ -1893,12 +2008,29 @@ new Phaser.Game({ type: Phaser.AUTO, backgroundColor:'#0b0b12', scene: Main,
   scale: { mode: Phaser.Scale.RESIZE, width: innerWidth, height: innerHeight } });
 `,
   node:
-`// Runs on the GRUDA server (Railway/local) via /api/ide/run.
-// The browser engines (three / rapier / phaser) run in the preview iframe instead.
-console.log('GRUDA Node scene');
-const n = 8; let total = 0;
-for (let i = 1; i <= n; i++) { total += i; console.log('tick', i); }
-console.log('sum 1..' + n + ' = ' + total);
+`// Node script — runs via Environment ▶ Play or IDE ▶ Run (local agent only on cloud host).
+// Browser engines (three / rapier / phaser) use the preview iframe instead.
+
+const FLEET = {
+  grudgeId: "https://id.grudge-studio.com",
+  assets: "https://assets.grudge-studio.com",
+  api: "https://api.grudge-studio.com",
+};
+
+async function main() {
+  console.log("GRUDA Node — fleet endpoints:", FLEET);
+  try {
+    const r = await fetch(FLEET.api + "/health");
+    console.log("api health:", await r.text());
+  } catch (e) {
+    console.log("fetch note:", e.message);
+  }
+  const loot = ["sword", "shield", "potion"];
+  console.log("inventory:", loot.join(", "));
+  console.log("done ✓");
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });
 `
 };
 
@@ -1932,11 +2064,26 @@ function initEnv(){
 function envOnEngine(){
   envEngine=document.getElementById('env-engine').value;
   document.getElementById('env-engine-label').textContent=ENV_ENGINE_LABEL[envEngine]||envEngine;
+  const ideBtn=document.getElementById('env-to-ide-btn');
+  if(ideBtn) ideBtn.style.display=(envEngine==='node')?'':'none';
   if(envEditor){
     const v=envEditor.getValue().trim();
     const isTemplate = v==='' || Object.values(ENV_TEMPLATES).some(t=>t.trim()===v);
     if(isTemplate) envEditor.setValue(ENV_TEMPLATES[envEngine]);
   }
+}
+async function envSaveToIde(){
+  if(!envEditor||envEngine!=='node') return;
+  if(!activeProj){ alert('Select a project first'); return; }
+  const rel='scripts/env-run.js';
+  const code=envEditor.getValue();
+  const base=(activeProj.path||activeProj.name).replace(/\\/g,'/');
+  const filePath=base.includes('/')?base+'/'+rel:activeProj.name+'/'+rel;
+  await fetch('/api/ide/file',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:filePath, content:code})});
+  showTab('ide');
+  setTimeout(async()=>{ await refreshTree(); openFile(filePath); }, 350);
+  envStatus('Saved to '+rel+' — IDE Run or terminal: node '+rel);
 }
 function envInsertTemplate(){ if(envEditor) envEditor.setValue(ENV_TEMPLATES[envEngine]); envStatus('Loaded '+envEngine+' template'); }
 
@@ -2013,6 +2160,7 @@ function envPlay(){
     fetch('/api/ide/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code, lang:'javascript'})})
       .then(r=>r.json()).then(d=>{
         cons.innerHTML='';
+        if(d.vercel){ const s=document.createElement('span'); s.className='e'; s.textContent=d.error+' — use 📂 IDE to save locally, or install npx gruda-agent.'; cons.appendChild(s); envStatus('Node needs local agent'); return; }
         if(d.error){ const s=document.createElement('span'); s.className='e'; s.textContent=d.error; cons.appendChild(s); }
         if(d.stdout) cons.appendChild(document.createTextNode(d.stdout));
         if(d.stderr){ const s=document.createElement('span'); s.className='e'; s.textContent=d.stderr; cons.appendChild(s); }
@@ -2623,23 +2771,64 @@ function newChat(){
 function openNewProj(){
   const mb=document.getElementById("new-proj-modal"); if(!mb) return;
   mb.classList.add("open");
+  loadProjectTemplates();
   const i=document.getElementById("new-proj-name");
   if(i){ i.value=""; setTimeout(()=>i.focus(),50); }
+}
+async function loadProjectTemplates(){
+  const grid=document.getElementById("proj-template-grid");
+  if(!grid) return;
+  let templates=[];
+  try{
+    const d=await fetch("/api/projects/templates").then(r=>r.json());
+    templates=d.templates||[];
+  }catch(e){
+    templates=[
+      {id:"blank",label:"Blank",description:"gruda.md only"},
+      {id:"three-scene",label:"Three.js Scene",description:"Orbit + cube scene"},
+      {id:"grudge-game",label:"Grudge Game",description:"R2 assetUrl starter"},
+      {id:"node-api",label:"Node API",description:"Express server"},
+      {id:"node-script",label:"Node Script",description:"Runnable script"},
+      {id:"static-web",label:"Static Web",description:"index.html deploy"},
+    ];
+  }
+  grid.innerHTML=templates.map(t=>`
+    <div class="proj-tpl${_selectedTemplate===t.id?' sel':''}" data-id="${esc(t.id)}" onclick="pickProjectTemplate('${esc(t.id)}',this)">
+      <div class="proj-tpl-name">${esc(t.label)}</div>
+      <div class="proj-tpl-desc">${esc(t.description)}</div>
+    </div>`).join("");
+}
+function pickProjectTemplate(id, el){
+  _selectedTemplate=id;
+  document.querySelectorAll(".proj-tpl").forEach(n=>n.classList.remove("sel"));
+  if(el) el.classList.add("sel");
 }
 async function createProj(){
   const inp=document.getElementById("new-proj-name");
   const name=((inp&&inp.value)||"").trim();
   if(!name) return;
   try{
-    const d=await fetch("/api/projects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})}).then(r=>r.json()).catch(()=>({name, path:""}));
+    const d=await fetch("/api/projects",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, template:_selectedTemplate||"blank"})}).then(r=>r.json()).catch(()=>({name, path:""}));
     const proj = { name: d.name || name, path: d.path || "" };
+    const mem=`# ${name}\n\nCreated: ${new Date().toISOString()}\nTemplate: ${d.template||_selectedTemplate}\n\n## Notes\n\n`;
     if (LocalSave.enabled()) {
       await LocalSave.store().saveProject(proj);
-      await LocalSave.saveProjectMemory(proj.name, `# ${name}\n\nCreated: ${new Date().toISOString()}\n\n## Notes\n\n`);
+      await LocalSave.saveProjectMemory(proj.name, mem);
     }
     document.getElementById("new-proj-modal")?.classList.remove("open");
     await loadProjects(await LocalSave.hydrate());
     await selectProj(proj);
+    if(d.template==="three-scene"||d.template==="grudge-game"){
+      showTab("env");
+      setTimeout(()=>{ if(envEditor&&d.files?.[0]) envStatus("Open scenes/*.js from IDE or paste into Environment"); }, 400);
+    } else if(d.template==="node-api"||d.template==="node-script"){
+      showTab("ide");
+      setTimeout(refreshTree, 300);
+    } else if(d.template==="static-web"){
+      showTab("cloud");
+      cloudLog("Static web created — deploy to Puter or Vercel from Cloud tab.");
+    }
   }catch(e){ alert("Could not create project: "+e.message); }
 }
 
@@ -2677,30 +2866,85 @@ function googleConnect(){
 function googleDisconnect(){ saveIntegration("google",null); setIntBadge("google-badge","Not connected",false); showIntActions("google",false); }
 function driveUploadProject(){ cloudLog("Drive upload needs the server-side Drive bridge (not enabled in this build)."); }
 /* GitHub */
-function githubConnect(){
+async function githubConnect(){
   const tok=(document.getElementById("github-token")?.value||"").trim();
   if(!tok){ cloudLog("Paste a GitHub token (repo scope) to connect."); return; }
-  saveIntegration("github",{ token:tok });
-  setIntBadge("github-badge","Token saved",true); showIntActions("github",true);
-  cloudLog("GitHub token saved. Push runs from a local GRUDA Agent with git installed.");
+  cloudLog("Validating GitHub token…");
+  try{
+    const d=await fetch("/api/integrations/github",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:tok})}).then(r=>r.json());
+    if(d.error){ cloudLog("GitHub: "+d.error); return; }
+    setIntBadge("github-badge",d.user||"Connected",true); showIntActions("github",true);
+    const gu=document.getElementById("github-user"); if(gu){ gu.style.display=""; gu.textContent="@"+d.user; }
+    await refreshGithubRepos();
+    cloudLog("GitHub connected as @"+d.user);
+  }catch(e){ cloudLog("GitHub connect failed: "+e.message); }
 }
-function githubDisconnect(){ saveIntegration("github",null); setIntBadge("github-badge","Not connected",false); showIntActions("github",false); }
-function githubPushProject(){
+function githubDisconnect(){
+  fetch("/api/integrations/github",{method:"DELETE"}).catch(()=>{});
+  setIntBadge("github-badge","Not connected",false); showIntActions("github",false);
+}
+async function refreshGithubRepos(){
+  const sel=document.getElementById("github-repo-select"); if(!sel) return;
+  try{
+    const d=await fetch("/api/deploy/github/repos").then(r=>r.json());
+    const repos=d.repos||[];
+    sel.innerHTML='<option value="">Select repo…</option>'+repos.map(r=>`<option value="${esc(r.name)}">${esc(r.fullName)}</option>`).join("");
+  }catch(e){ sel.innerHTML='<option value="">Connect GitHub first</option>'; }
+}
+async function githubPushProject(){
   if(!activeProj){ cloudLog("Select a project first."); return; }
-  cloudLog("Push queued for "+activeProj.name+". Full GitHub push runs from a local GRUDA Agent.");
+  const sel=document.getElementById("github-repo-select");
+  const newRepo=(document.getElementById("github-new-repo")?.value||"").trim();
+  const repoName=newRepo||sel?.value;
+  if(!repoName){ cloudLog("Pick or enter a repo name."); return; }
+  const files=await collectProjectFiles();
+  if(!files.length){ cloudLog("No files to push."); return; }
+  cloudLog("Pushing "+files.length+" file(s) to "+repoName+"…");
+  try{
+    const d=await fetch("/api/deploy/github",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({repoName, files, createRepo:!!newRepo})}).then(r=>r.json());
+    if(d.error){ cloudLog("Push failed: "+d.error); return; }
+    cloudLog("Pushed → "+(d.url||d.repo));
+    await refreshGithubRepos();
+  }catch(e){ cloudLog("Push error: "+e.message); }
 }
 /* Vercel */
-function vercelConnect(){
+async function vercelConnect(){
   const tok=(document.getElementById("vercel-token")?.value||"").trim();
   if(!tok){ cloudLog("Paste a Vercel token to connect."); return; }
-  saveIntegration("vercel",{ token:tok });
-  setIntBadge("vercel-badge","Token saved",true); showIntActions("vercel",true);
-  cloudLog("Vercel token saved. Deploy runs from a local GRUDA Agent.");
+  try{
+    const d=await fetch("/api/integrations/vercel",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:tok})}).then(r=>r.json());
+    if(d.error){ cloudLog("Vercel: "+d.error); return; }
+    setIntBadge("vercel-badge",d.user||"Connected",true); showIntActions("vercel",true);
+    const vu=document.getElementById("vercel-user"); if(vu){ vu.style.display=""; vu.textContent=d.user; }
+    await refreshVercelDeploys();
+    cloudLog("Vercel connected as "+d.user);
+  }catch(e){ cloudLog("Vercel connect failed: "+e.message); }
 }
-function vercelDisconnect(){ saveIntegration("vercel",null); setIntBadge("vercel-badge","Not connected",false); showIntActions("vercel",false); }
-function vercelDeployProject(){
+function vercelDisconnect(){
+  fetch("/api/integrations/vercel",{method:"DELETE"}).catch(()=>{});
+  setIntBadge("vercel-badge","Not connected",false); showIntActions("vercel",false);
+}
+async function refreshVercelDeploys(){
+  const el=document.getElementById("vercel-deploys"); if(!el) return;
+  try{
+    const d=await fetch("/api/deploy/vercel/list").then(r=>r.json());
+    const deps=d.deployments||[];
+    el.innerHTML=deps.length?deps.map(x=>`<div><a href="${x.url}" target="_blank" rel="noreferrer">${esc(x.name)}</a> · ${esc(x.state)}</div>`).join(""):"No recent deploys";
+  }catch(e){ el.textContent=""; }
+}
+async function vercelDeployProject(){
   if(!activeProj){ cloudLog("Select a project first."); return; }
-  cloudLog("Deploy queued for "+activeProj.name+". Full Vercel deploy runs from a local GRUDA Agent.");
+  const files=await collectProjectFiles();
+  if(!files.length){ cloudLog("No files to deploy."); return; }
+  cloudLog("Deploying "+files.length+" file(s) to Vercel…");
+  try{
+    const d=await fetch("/api/deploy/vercel",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({projectName:activeProj.name.replace(/[^a-z0-9-]/gi,"-").toLowerCase(), files})}).then(r=>r.json());
+    if(d.error){ cloudLog("Deploy failed: "+d.error); return; }
+    cloudLog("Live → "+(d.url||"check Vercel dashboard"));
+    await refreshVercelDeploys();
+  }catch(e){ cloudLog("Deploy error: "+e.message); }
 }
 /* Quick-deploy cards */
 function deployTo(target){
@@ -2731,11 +2975,10 @@ function downloadLauncher(osName){
 /* Restore saved integration badges when the Cloud tab opens. */
 async function refreshIntegrationsUI(){
   try{
-    const c=await fetch("/api/config").then(r=>r.json());
-    const ints=(c&&c.integrations)||{};
-    if(ints.github&&ints.github.token){ setIntBadge("github-badge","Token saved",true); showIntActions("github",true); }
-    if(ints.vercel&&ints.vercel.token){ setIntBadge("vercel-badge","Token saved",true); showIntActions("vercel",true); }
-    if(ints.google&&ints.google.clientId){ setIntBadge("google-badge","Saved",true); showIntActions("google",true); }
+    const ints=await fetch("/api/integrations").then(r=>r.json());
+    if(ints.github?.connected){ setIntBadge("github-badge",ints.github.user||"Connected",true); showIntActions("github",true); await refreshGithubRepos(); }
+    if(ints.vercel?.connected){ setIntBadge("vercel-badge",ints.vercel.user||"Connected",true); showIntActions("vercel",true); await refreshVercelDeploys(); }
+    if(ints.google?.connected){ setIntBadge("google-badge","Saved",true); showIntActions("google",true); }
   }catch(e){}
 }
 
