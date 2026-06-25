@@ -19,6 +19,8 @@
 <meta name="twitter:image" content="/gruda-king.png">
 <script src="https://js.puter.com/v2/" async></script>
 <script src="/local-store.js"></script>
+<script src="/ollama-client.js"></script>
+<script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -166,6 +168,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .tm-time{font-size:.65rem;color:var(--muted);}
 .tm-body{font-size:.83rem;line-height:1.55;padding-left:2px;white-space:pre-wrap;}
 .tm-system{font-size:.72rem;color:var(--muted);font-style:italic;text-align:center;padding:4px 0;}
+.treaty-rooms{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;}
+.treaty-room-btn{padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:.7rem;cursor:pointer;}
+.treaty-room-btn.active,.treaty-room-btn:hover{border-color:var(--accent);color:var(--accent);}
+.treaty-share-btn{margin-left:auto;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.68rem;cursor:pointer;}
+.treaty-share-btn:hover{border-color:var(--accent);color:var(--accent);}
+.treaty-account{font-size:.68rem;color:var(--muted);padding:0 12px 6px;}
 .treaty-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;}
 #treaty-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;color:var(--text);font-size:.84rem;outline:none;font-family:inherit;}
 #treaty-input:focus{border-color:var(--accent);}
@@ -456,7 +464,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="sb-label">Navigate</div>
     <div class="sb-nav">
       <button class="nav-btn active" id="nav-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</button>
-      <button class="nav-btn" id="nav-treaty" onclick="showTab('treaty')">💬 Treaty Chat</button>
+      <button class="nav-btn" id="nav-treaty" onclick="showTab('treaty')">💬 Treaty</button>
       <button class="nav-btn" id="nav-ide" onclick="showTab('ide')">🖥️ IDE</button>
       <button class="nav-btn" id="nav-env" onclick="showTab('env')">🎮 Environment</button>
       <button class="nav-btn" id="nav-assets" onclick="showTab('assets')">🎨 Assets</button>
@@ -477,7 +485,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div id="main">
     <div id="tabs">
       <div class="tab active" id="tab-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</div>
-      <div class="tab" id="tab-treaty" onclick="showTab('treaty')">💬 Treaty Chat <span id="treaty-badge" class="treaty-badge" style="margin-left:4px">—</span></div>
+      <div class="tab" id="tab-treaty" onclick="showTab('treaty')">💬 Treaty <span id="treaty-badge" class="treaty-badge" style="margin-left:4px">●</span></div>
       <div class="tab" id="tab-ide" onclick="showTab('ide')">🖥️ IDE</div>
       <div class="tab" id="tab-env" onclick="showTab('env')">🎮 Environment</div>
       <div class="tab" id="tab-assets" onclick="showTab('assets')">🎨 Assets</div>
@@ -508,14 +516,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="tab-panel" id="panel-treaty">
       <div id="treaty-panel">
         <div class="treaty-header">
-          <span class="treaty-title"><img src="/gruda-king.png" alt="" class="gruda-ico"> Treaty Chat — Grudge Studio Community</span>
-          <span class="treaty-badge" id="treaty-status-badge">Connecting…</span>
+          <span class="treaty-title"><img src="/gruda-king.png" alt="" class="gruda-ico"> Treaty — Account Chat</span>
+          <span class="treaty-badge live" id="treaty-status-badge">Live</span>
         </div>
+        <div class="treaty-rooms" id="treaty-rooms"></div>
+        <div class="treaty-account" id="treaty-account-hint">Sign in via Cloud tab for your Grudge identity</div>
         <div id="treaty-msgs">
-          <div class="tm-system">Treaty Chat connects you to the live Grudge Studio community. Share files, ideas, and builds.</div>
+          <div class="tm-system">Light shareable rooms — pick a channel, invite with the share link.</div>
         </div>
         <div class="treaty-input-row">
-          <input id="treaty-input" placeholder="Send a message to the community…" onkeydown="if(event.key==='Enter')sendTreaty()">
+          <input id="treaty-input" placeholder="Message this room…" onkeydown="if(event.key==='Enter')sendTreaty()">
           <button id="treaty-send" onclick="sendTreaty()">Send</button>
         </div>
       </div>
@@ -1094,35 +1104,52 @@ async function runFleetMismatch(){
 const PUTER_MODELS = ["gpt-4o-mini","gpt-4o","claude-3-5-sonnet","gemini-2.0-flash","deepseek-chat"];
 function isGrokModel(v){ return typeof v==="string" && (v.indexOf("grok:")===0 || v.indexOf("xai:")===0); }
 function isPuterModel(v){ return typeof v==="string" && v.indexOf("puter:")===0; }
+function isOllamaModel(v){ return window.GrudaOllama?.isLocalModel?.(v); }
 function isCloudHost(){ return location.hostname !== "localhost" && location.hostname !== "127.0.0.1"; }
+window._clientOllama = false;
+
+async function probeClientOllama() {
+  if (!window.GrudaOllama) return { ok: false, models: [] };
+  const d = await GrudaOllama.detect();
+  window._clientOllama = !!d.ok;
+  return d;
+}
 
 async function loadModels() {
   const sel=document.getElementById("model-select");
   const puterOpts=`<optgroup label="Puter (free chat)">`+
     PUTER_MODELS.map(m=>`<option value="puter:${m}">${m}</option>`).join("")+`</optgroup>`;
   let grokOpts="", ollamaOpts="";
+  const client = await probeClientOllama();
   try {
     const d=await fetch("/api/models").then(r=>r.json());
     const models=d.models||[];
     const allm=models.filter(m=>String(m.name).indexOf("allm:")===0);
     const grok=models.filter(m=>isGrokModel(m.name));
-    const ollama=models.filter(m=>!isGrokModel(m.name)&&String(m.name).indexOf("allm:")!==0&&String(m.name).indexOf("grudge:")!==0);
+    const serverOllama=models.filter(m=>isOllamaModel(m.name));
+    const clientOllama=(client.models||[]).map(n=>({name:n}));
+    const ollama=[...new Map([...serverOllama,...clientOllama].map(m=>[m.name,m])).values()];
     if (allm.length) grokOpts=`<optgroup label="AnythingLLM (fleet RAG)">`+
       allm.map(m=>`<option value="${m.name}">${m.label||m.name.replace(/^allm:/,"")}</option>`).join("")+`</optgroup>`;
     if (grok.length) grokOpts+=`<optgroup label="Grok (agent tools)">`+
       grok.map(m=>`<option value="${m.name}">${(m.label||m.name).replace(/^grok:/,"")}</option>`).join("")+`</optgroup>`;
     if (ollama.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
-      ollama.map(m=>`<option value="${m.name}">${m.name}</option>`).join("")+`</optgroup>`;
+      ollama.map(m=>`<option value="${m.name}">${m.name}${client.ok?"":" (server)"}</option>`).join("")+`</optgroup>`;
     window._hasGrok = !!d.grok;
   } catch(e){ window._hasGrok = false; }
+  if (!ollamaOpts && client.models?.length) {
+    ollamaOpts=`<optgroup label="Local (Ollama — your PC)">`+
+      client.models.map(m=>`<option value="${m}">${m}</option>`).join("")+`</optgroup>`;
+  }
   sel.innerHTML = grokOpts + ollamaOpts + puterOpts;
   const firstGrok = sel.querySelector('optgroup[label^="Grok"] option');
   const firstLocal = sel.querySelector('optgroup[label^="Local"] option');
-  if (firstGrok && isCloudHost()) {
+  if (firstLocal && (client.ok || !isCloudHost())) {
+    currentModel = firstLocal.value;
+    if (client.ok) setMode("agent");
+  } else if (firstGrok && isCloudHost()) {
     currentModel = firstGrok.value;
     setMode("agent");
-  } else if (firstLocal) {
-    currentModel = firstLocal.value;
   } else {
     currentModel = "puter:"+PUTER_MODELS[0];
   }
@@ -1180,28 +1207,68 @@ async function refreshMem() {
 }
 
 async function checkHealth() {
-  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:false,grok:false}));
+  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:true,grok:false}));
+  const client = await probeClientOllama();
+  const ollamaOn = !!h.ollama || !!client.ok;
   document.getElementById("d-grok")?.classList.toggle("on", !!h.grok);
-  document.getElementById("d-ollama")?.classList.toggle("on", !!h.ollama);
+  document.getElementById("d-ollama")?.classList.toggle("on", ollamaOn);
   document.getElementById("d-treaty")?.classList.toggle("on", !!h.treaty);
   window._hasGrok = !!h.grok;
 }
 
-/* ── TREATY CHAT ── */
+/* ── TREATY CHAT (light account rooms) ── */
+const _treatySeen = new Set();
+let _treatyRoom = "general";
+
+function updateTreatyAccountHint() {
+  const el = document.getElementById("treaty-account-hint");
+  if (!el) return;
+  const u = GrudgeAuth?.user;
+  el.textContent = u?.grudgeId
+    ? `Signed in as ${u.username || displayName} · ${u.grudgeId.slice(0, 12)}…`
+    : "Guest mode — sign in via Cloud tab for your Grudge account identity";
+}
+
+function renderTreatyRooms(active) {
+  const wrap = document.getElementById("treaty-rooms");
+  if (!wrap || !window.GrudaTreaty) return;
+  wrap.innerHTML = "";
+  for (const r of GrudaTreaty.rooms()) {
+    const b = document.createElement("button");
+    b.className = "treaty-room-btn" + (r.id === active ? " active" : "");
+    b.textContent = r.name;
+    b.onclick = () => switchTreatyRoom(r.id);
+    wrap.appendChild(b);
+  }
+  const share = document.createElement("button");
+  share.className = "treaty-share-btn";
+  share.textContent = "⎘ Share room";
+  share.onclick = () => {
+    const url = GrudaTreaty.shareUrl(_treatyRoom);
+    navigator.clipboard?.writeText(url).catch(()=>{});
+    share.textContent = "Copied!";
+    setTimeout(()=>{ share.textContent = "⎘ Share room"; }, 1500);
+  };
+  wrap.appendChild(share);
+}
+
 function updateTreatyStatus(online) {
   const badge = document.getElementById("treaty-status-badge");
   const tabBadge = document.getElementById("treaty-badge");
-  if (badge) { badge.textContent = online ? "Live" : "Offline"; badge.classList.toggle("live", online); }
-  if (tabBadge) tabBadge.textContent = online ? "●" : "—";
+  if (badge) { badge.textContent = online ? "Live" : "Syncing…"; badge.classList.toggle("live", online); }
+  if (tabBadge) tabBadge.textContent = online ? "●" : "…";
   document.getElementById("d-treaty")?.classList.toggle("on", online);
 }
 
 function onTreatyMsg(data) {
   const box = document.getElementById("treaty-msgs");
   if (!box || !data) return;
+  const id = data.id || `${data.ts}-${data.text}`;
+  if (_treatySeen.has(id)) return;
+  _treatySeen.add(id);
   const el = document.createElement("div");
   el.className = "tm";
-  const who = data.user || data.displayName || "Anon";
+  const who = data.from?.displayName || data.from?.username || data.user || data.displayName || "Anon";
   const text = data.text || data.message || "";
   el.innerHTML = `<div class="tm-head"><span class="tm-user">${esc(who)}</span><span class="tm-time">${data.ts ? fmtDate(data.ts) : ""}</span></div><div class="tm-body">${esc(text)}</div>`;
   box.appendChild(el);
@@ -1211,53 +1278,53 @@ function onTreatyMsg(data) {
 async function sendTreaty() {
   const input = document.getElementById("treaty-input");
   const text = (input?.value || "").trim();
-  if (!text) return;
-  const payload = { user: displayName, text, ts: Date.now() };
-  if (window._treatyWs?.readyState === WebSocket.OPEN) {
-    window._treatyWs.send(JSON.stringify(payload));
-  } else {
-    const r = await fetch("/api/treaty/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
-    if (!r.ok) { const d = await r.json().catch(()=>({})); onTreatyMsg({ user:"System", text: d.error || "Treaty offline — message saved locally only.", ts: Date.now() }); }
-  }
+  if (!text || !window.GrudaTreaty) return;
   input.value = "";
-  onTreatyMsg({ ...payload, user: displayName + " (you)" });
+  const msg = await GrudaTreaty.send(text);
+  onTreatyMsg({ ...msg, from: { ...msg.from, displayName: (msg.from?.displayName || displayName) + " (you)" } });
 }
 
-function tryDirectTreatyWS(wsUrl) {
-  if (!wsUrl || window._treatyWs?.readyState === WebSocket.OPEN) return;
-  try {
-    const tws = new WebSocket(wsUrl);
-    tws.onopen = () => updateTreatyStatus(true);
-    tws.onmessage = e => { try { onTreatyMsg(JSON.parse(e.data)); } catch {} };
-    tws.onclose = () => { updateTreatyStatus(false); setTimeout(() => tryDirectTreatyWS(wsUrl), 8000); };
-    tws.onerror = () => updateTreatyStatus(false);
-    window._treatyWs = tws;
-  } catch { updateTreatyStatus(false); }
+function switchTreatyRoom(roomId) {
+  _treatyRoom = roomId;
+  const box = document.getElementById("treaty-msgs");
+  if (box) {
+    box.innerHTML = `<div class="tm-system">Room: <strong>${esc(roomId)}</strong> — share this link to invite others.</div>`;
+  }
+  _treatySeen.clear();
+  renderTreatyRooms(roomId);
+  const u = new URL(location.href);
+  u.searchParams.set("room", roomId);
+  history.replaceState(null, "", u.toString());
+  if (window.GrudaTreaty) {
+    GrudaTreaty.stop();
+    GrudaTreaty.start(roomId, { onMessage: onTreatyMsg, onStatus: updateTreatyStatus });
+  }
 }
 
 async function initTreaty() {
+  if (!window.GrudaTreaty) return;
+  const params = new URLSearchParams(location.search);
+  const room = params.get("room") || "general";
+  updateTreatyAccountHint();
+  renderTreatyRooms(room);
   try {
-    const hist = await fetch("/api/treaty/messages").then(r=>r.json());
+    const hist = await fetch(`/api/treaty/room/${encodeURIComponent(room)}/messages`).then(r=>r.json());
     (hist.messages||[]).forEach(m => onTreatyMsg(m));
   } catch {}
-  try {
-    const s = await fetch("/api/treaty/status").then(r=>r.json());
-    updateTreatyStatus(!!s.connected);
-    if (s.directWs) tryDirectTreatyWS(s.directWs);
-    else if (!s.connected) updateTreatyStatus(false);
-  } catch { updateTreatyStatus(false); }
+  GrudaTreaty.start(room, { onMessage: onTreatyMsg, onStatus: updateTreatyStatus });
+  _treatyRoom = room;
+  updateTreatyStatus(true);
 }
 
-/* ── WEBSOCKET (local server relay) ── */
+/* ── WEBSOCKET (local server relay — optional) ── */
 function initWS() {
-  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   initTreaty();
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   if (!isLocal) return;
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.hostname}:${location.port || 3200}`);
   ws.onmessage = e => {
     const d = JSON.parse(e.data);
-    if (d.type === "treaty_status") updateTreatyStatus(d.online);
     if (d.type === "treaty_msg") onTreatyMsg(d.data);
     if (d.type === "connected" && d.displayName) displayName = d.displayName || displayName;
   };
@@ -1272,6 +1339,7 @@ function showTab(tab) {
     document.getElementById("nav-"+t)?.classList.toggle("active",t===tab);
   });
   if(tab==="cloud")  loadIntegrations();
+  if(tab==="treaty") { updateTreatyAccountHint(); initTreaty(); }
   if(tab==="ide")    { initMonaco(); refreshTree(); }
   if(tab==="assets") loadAssets();
   if(tab==="env")    initEnv();
@@ -1906,6 +1974,14 @@ async function runChat() {
       think.remove();
       const sys = window.personaSystem ? [{role:"system",content:window.personaSystem}] : [];
       full = await puterChatStream([...sys, ...messages], currentModel, bodyEl);
+    } else if (isOllamaModel(currentModel) && window._clientOllama && GrudaOllama?.available) {
+      think.remove();
+      const sys = window.personaSystem ? [{role:"system",content:window.personaSystem}] : [];
+      const all = sys.length ? [...sys, ...messages] : messages;
+      full = await GrudaOllama.streamChat(all, currentModel, (_tok, acc) => {
+        bodyEl.innerHTML = mdToHtml(acc);
+        scrollBot();
+      });
     } else {
       const res=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel})});
       think.remove();
@@ -1937,24 +2013,50 @@ async function runAgent() {
   const {msgEl,bodyEl,toolsEl}=addAgentMsg(true);
   let full="";
   try {
-    const res=await fetch("/api/agent/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel,projectDir:activeProj?.path||""})});
-    think.remove();
-    const rdr=res.body.getReader();const dec=new TextDecoder();let buf="";
-    while(true){
-      const{value,done}=await rdr.read();if(done)break;
-      buf+=dec.decode(value,{stream:true});
-      const lines=buf.split("\n");buf=lines.pop();
-      for(const l of lines){
-        if(!l.startsWith("data: ")) continue;
-        const raw=l.slice(6).trim();
-        if(raw==="[DONE]") break;
-        try {
-          const d=JSON.parse(raw);
-          if(d.type==="token"){ full+=d.content; bodyEl.innerHTML=mdToHtml(full); scrollBot(); }
-          else if(d.type==="tool_call"){ addToolCall(toolsEl,d); }
-          else if(d.type==="tool_result"){ addToolResult(toolsEl,d); }
-          else if(d.type==="error"){ addErr(bodyEl,d.message); }
-        } catch(e){}
+    const useClientOllama = isOllamaModel(currentModel) && window._clientOllama && GrudaOllama?.available;
+    if (useClientOllama) {
+      think.remove();
+      const tools = await fetch("/api/agent/tools").then(r=>r.json()).catch(()=>({tools:[]}));
+      full = await GrudaOllama.runAgentLoop({
+        messages,
+        model: currentModel,
+        system: window.personaSystem || "You are GRUDA Agent.",
+        tools: tools.tools || [],
+        onEvent: (d) => {
+          if (d.type === "token") { full += d.content; bodyEl.innerHTML = mdToHtml(full); scrollBot(); }
+          else if (d.type === "tool_call") addToolCall(toolsEl, d);
+          else if (d.type === "tool_result") addToolResult(toolsEl, d);
+          else if (d.type === "error") addErr(bodyEl, d.message);
+        },
+        executeTool: async (tool, args) => {
+          const r = await fetch("/api/agent/tool", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tool, args, projectName: activeProj?.name || "", projectDir: activeProj?.path || "" }),
+          });
+          const d = await r.json();
+          return d.result || d;
+        },
+      });
+    } else {
+      const res=await fetch("/api/agent/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel,projectDir:activeProj?.path||"",projectName:activeProj?.name||""})});
+      think.remove();
+      const rdr=res.body.getReader();const dec=new TextDecoder();let buf="";
+      while(true){
+        const{value,done}=await rdr.read();if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split("\n");buf=lines.pop();
+        for(const l of lines){
+          if(!l.startsWith("data: ")) continue;
+          const raw=l.slice(6).trim();
+          if(raw==="[DONE]") break;
+          try {
+            const d=JSON.parse(raw);
+            if(d.type==="token"){ full+=d.content; bodyEl.innerHTML=mdToHtml(full); scrollBot(); }
+            else if(d.type==="tool_call"){ addToolCall(toolsEl,d); }
+            else if(d.type==="tool_result"){ addToolResult(toolsEl,d); }
+            else if(d.type==="error"){ addErr(bodyEl,d.message); }
+          } catch(e){}
+        }
       }
     }
     if(full) messages.push({role:"assistant",content:full});
@@ -2156,6 +2258,7 @@ const GrudgeAuth = {
       if (inn) { userEl.style.display="block"; userEl.innerHTML = `<strong style="color:var(--gold)">${esc(this.user.username||"Grudge Warlord")}</strong><br><span style="font-size:.7rem;color:var(--muted)">Grudge ID: ${esc(this.user.grudgeId)}</span>`; }
       else userEl.style.display="none";
     }
+    try { updateTreatyAccountHint(); } catch(e){}
     const chip=document.getElementById("login-chip");
     if (chip) {
       chip.innerHTML = inn

@@ -29,6 +29,7 @@ const grudgeAiHub = require("./lib/grudgeAiHub");
 const anythingllm = require("./lib/anythingllm");
 const fleetMismatch = require("./lib/fleet-mismatch");
 const userInsights = require("./lib/user-insights");
+const treatyChat = require("./lib/treaty-chat");
 
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
@@ -70,10 +71,13 @@ const DATA_DIR     = process.env.DATA_DIR || path.join(process.env.VERCEL ? os.t
 const CONFIG_FILE  = path.join(DATA_DIR, "config.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const INSIGHTS_DIR = path.join(DATA_DIR, "insights");
+const TREATY_DIR   = path.join(DATA_DIR, "treaty");
+const GRUDGE_SOCIAL_URL = (process.env.GRUDGE_SOCIAL_URL || "https://grudge-social.puter.site").replace(/\/$/, "");
 // Best-effort: serverless hosts (Vercel) only allow writes under /tmp
 try { fs.mkdirSync(PROJECTS_DIR, { recursive: true }); } catch {}
 try { fs.mkdirSync(DATA_DIR,     { recursive: true }); } catch {}
 try { fs.mkdirSync(INSIGHTS_DIR, { recursive: true }); } catch {}
+try { fs.mkdirSync(TREATY_DIR, { recursive: true }); } catch {}
 
 /* ── Config helpers ──────────────────────────────────────────── */
 function loadConfig() {
@@ -525,6 +529,23 @@ app.post("/api/agent/stream", async (req, res) => {
   res.end();
 });
 
+app.get("/api/agent/tools", (_req, res) => {
+  res.json({ tools: TOOLS });
+});
+
+// Single tool execution — used by browser-side Ollama agent loop on Vercel/cloud
+app.post("/api/agent/tool", async (req, res) => {
+  const { tool, args, projectDir, projectName } = req.body || {};
+  if (!tool) return res.status(400).json({ error: "tool required" });
+  const pDir = projectDir || (projectName ? path.join(PROJECTS_DIR, projectName) : PROJECTS_DIR);
+  try {
+    const result = await executeTool(tool, args || {}, pDir);
+    res.json({ ok: true, tool, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ── Chat stream (no tools) ──────────────────────────────────── */
 app.post("/api/chat/stream", async (req, res) => {
   const { messages, model, system } = req.body;
@@ -853,34 +874,112 @@ app.get("/api/auth/config", (_req, res) => res.json({
   linkEnabled: !!GRUDGE_ACCOUNT_URL,
 }));
 
-/* ── Treaty Chat relay endpoint ──────────────────────────────── */
-const treatyBuffer = [];
-const TREATY_BUF_MAX = 200;
+/* ── Treaty Chat — light account-linked shareable rooms ──────── */
+async function socialRelaySend(roomId, fromUuid, text) {
+  if (!GRUDGE_SOCIAL_URL) return null;
+  try {
+    const r = await fetch(`${GRUDGE_SOCIAL_URL}/api/chat/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromUuid, roomId, text, type: "text" }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) return await r.json();
+  } catch {}
+  return null;
+}
 
-app.post("/api/treaty/send", (req, res) => {
-  const payload = { ...req.body, ts: req.body.ts || Date.now(), id: `t-${Date.now()}` };
-  if (treatyWs && treatyWs.readyState === WebSocket.OPEN) {
-    try { treatyWs.send(JSON.stringify(payload)); return res.json({ ok: true, relayed: true }); }
-    catch (err) { return res.status(500).json({ error: err.message }); }
+async function socialRelayFetch(roomId, limit = 80) {
+  if (!GRUDGE_SOCIAL_URL) return null;
+  try {
+    const r = await fetch(`${GRUDGE_SOCIAL_URL}/api/chat/room?roomId=${encodeURIComponent(roomId)}&limit=${limit}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      return (d.messages || []).map((m) => ({
+        id: m.id,
+        roomId,
+        from: { username: m.from, displayName: m.from },
+        text: m.text,
+        ts: m.timestamp || m.ts,
+      }));
+    }
+  } catch {}
+  return null;
+}
+
+app.get("/api/treaty/config", (req, res) => {
+  const room = treatyChat.normalizeRoomId(req.query.room || "general");
+  res.json({
+    mode: "account-room",
+    rooms: treatyChat.DEFAULT_ROOMS,
+    room,
+    shareUrl: treatyChat.shareUrl(`${req.protocol}://${req.get("host")}`, room),
+    socialUrl: GRUDGE_SOCIAL_URL,
+    serverless: !!process.env.VERCEL,
+  });
+});
+
+app.get("/api/treaty/rooms", (_req, res) => {
+  res.json({ rooms: treatyChat.DEFAULT_ROOMS });
+});
+
+app.get("/api/treaty/room/:id/messages", async (req, res) => {
+  const roomId = treatyChat.normalizeRoomId(req.params.id);
+  let messages = treatyChat.readRoomMessages(fs, TREATY_DIR, roomId);
+  const social = await socialRelayFetch(roomId);
+  if (social?.length) {
+    const seen = new Set(messages.map((m) => m.id));
+    for (const m of social) if (!seen.has(m.id)) messages.push(m);
+    messages.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    messages = messages.slice(-200);
   }
-  // Serverless fallback: buffer locally; clients may also connect directly to treaty URL
-  treatyBuffer.push(payload);
-  if (treatyBuffer.length > TREATY_BUF_MAX) treatyBuffer.shift();
-  broadcast({ type: "treaty_msg", data: payload });
-  res.json({ ok: true, relayed: false, buffered: true });
+  res.json({ roomId, messages });
+});
+
+app.post("/api/treaty/room/:id/send", async (req, res) => {
+  const roomId = treatyChat.normalizeRoomId(req.params.id);
+  const sender = treatyChat.normalizeSender(req.body);
+  const text = String(req.body?.text || "").trim();
+  if (!text) return res.status(400).json({ error: "text required" });
+  const msg = treatyChat.makeMessage(roomId, sender, text);
+  treatyChat.appendMessage(fs, TREATY_DIR, roomId, msg);
+  pgAppendTreaty(msg);
+  if (sender.grudgeId) await socialRelaySend(roomId, sender.grudgeId, text);
+  broadcast({ type: "treaty_msg", data: msg });
+  res.json({ ok: true, message: msg });
+});
+
+// Legacy endpoint — same as room send (default room: general)
+app.post("/api/treaty/send", async (req, res) => {
+  const roomId = treatyChat.normalizeRoomId(req.body?.roomId || req.body?.room || "general");
+  const sender = treatyChat.normalizeSender(req.body);
+  const text = String(req.body?.text || req.body?.message || "").trim();
+  if (!text) return res.status(400).json({ error: "text required" });
+  const msg = treatyChat.makeMessage(roomId, sender, text);
+  treatyChat.appendMessage(fs, TREATY_DIR, roomId, msg);
+  pgAppendTreaty(msg);
+  if (sender.grudgeId) await socialRelaySend(roomId, sender.grudgeId, text);
+  broadcast({ type: "treaty_msg", data: msg });
+  res.json({ ok: true, message: msg, relayed: true });
 });
 
 app.get("/api/treaty/status", (_req, res) => {
   res.json({
-    connected: !!(treatyWs && treatyWs.readyState === WebSocket.OPEN),
-    url: TREATY_URL,
+    connected: true,
+    mode: "poll",
+    rooms: treatyChat.DEFAULT_ROOMS.length,
+    socialUrl: GRUDGE_SOCIAL_URL,
+    legacyWs: TREATY_URL,
     serverless: !!process.env.VERCEL,
-    directWs: TREATY_URL ? TREATY_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws" : null,
   });
 });
 
-app.get("/api/treaty/messages", (_req, res) => {
-  res.json({ messages: treatyBuffer.slice(-50) });
+app.get("/api/treaty/messages", (req, res) => {
+  const roomId = treatyChat.normalizeRoomId(req.query.room || "general");
+  const messages = treatyChat.readRoomMessages(fs, TREATY_DIR, roomId).slice(-50);
+  res.json({ messages, roomId });
 });
 
 /* ── Splash media ────────────────────────────────────────────── */
@@ -899,13 +998,27 @@ app.get("/api/splash/gif2", (req, res) => {
 /* ── Health ──────────────────────────────────────────────────── */
 app.get("/api/health", async (_req, res) => {
   let ollama = false;
-  try { const r = await fetch(`${OLLAMA_HOST}/api/tags`); ollama = r.ok; } catch {}
-  const treaty = !!(treatyWs && treatyWs.readyState === WebSocket.OPEN);
+  let ollamaHost = OLLAMA_HOST;
+  try {
+    const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal: AbortSignal.timeout(4000) });
+    ollama = r.ok;
+  } catch {}
   res.json({
-    ok: true, ollama, treaty, grok: grokBuild.hasGrokApi(),
+    ok: true,
+    ollama,
+    ollamaHost,
+    ollamaNote: process.env.VERCEL
+      ? "Server cannot reach your PC — browser probes 127.0.0.1:11434 when you run Ollama locally"
+      : null,
+    treaty: true,
+    treatyMode: "account-room",
+    grok: grokBuild.hasGrokApi(),
     grudgeAi: grudgeAiHub.listHubModels().length > 0,
-    skills: _bundledSkills.length, serverless: !!process.env.VERCEL,
-    db: pgReady, music: !!MUREKA_KEY, voice: !!ELEVEN_KEY,
+    skills: _bundledSkills.length,
+    serverless: !!process.env.VERCEL,
+    db: pgReady,
+    music: !!MUREKA_KEY,
+    voice: !!ELEVEN_KEY,
   });
 });
 
@@ -1510,6 +1623,9 @@ async function pgInit() {
       CREATE TABLE IF NOT EXISTS gruda_insights (
         slug TEXT PRIMARY KEY, content TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS gruda_treaty_messages (
+        id TEXT PRIMARY KEY, room_id TEXT, sender JSONB, text TEXT, ts TIMESTAMPTZ DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS gruda_music (
         id SERIAL PRIMARY KEY, kind TEXT, task_id TEXT, prompt TEXT, lyrics TEXT,
         model TEXT, status TEXT, result JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
@@ -1577,6 +1693,13 @@ function pgUpsertInsight(slug, content) {
   pgPool.query(
     "INSERT INTO gruda_insights (slug,content,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (slug) DO UPDATE SET content=$2, updated_at=NOW()",
     [slug, content || ""]
+  ).catch(()=>{});
+}
+function pgAppendTreaty(msg) {
+  if (!pgReady || !msg) return;
+  pgPool.query(
+    "INSERT INTO gruda_treaty_messages (id,room_id,sender,text,ts) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
+    [msg.id, msg.roomId, JSON.stringify(msg.from || {}), msg.text, msg.ts || new Date().toISOString()]
   ).catch(()=>{});
 }
 function pgSaveMusic(rec) {
