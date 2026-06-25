@@ -34,11 +34,72 @@ const treatyChat = require("./lib/treaty-chat");
 const SKILLS_DIR = path.join(__dirname, "skills");
 let _bundledSkills = grokBuild.loadBundledSkills(SKILLS_DIR);
 
+/* ── Platform data dirs (Windows AppData / XDG best practices) ─ */
+function defaultDataDir() {
+  if (process.env.VERCEL) return path.join(os.tmpdir(), "gruda-agent");
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  const plat = process.platform;
+  if (plat === "win32") {
+    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, "GrudgeStudio", "gruda-agent");
+  }
+  if (plat === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "GrudgeStudio", "gruda-agent");
+  }
+  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(xdg, "gruda-agent");
+}
+
+function defaultProjectsDir() {
+  if (process.env.VERCEL) return path.join(os.tmpdir(), "gruda-projects");
+  if (process.env.PROJECTS_DIR) return process.env.PROJECTS_DIR;
+  const plat = process.platform;
+  if (plat === "win32") {
+    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+    return path.join(local, "GrudgeStudio", "gruda-agent", "projects");
+  }
+  if (plat === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "GrudgeStudio", "gruda-agent", "projects");
+  }
+  const xdg = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+  return path.join(xdg, "gruda-agent", "projects");
+}
+
+function describeStoragePaths() {
+  const web = {
+    engine: "IndexedDB",
+    db: "gruda-agent-local",
+    note: "Primary persistence on Vercel — export workspace to sync with desktop",
+  };
+  if (process.env.VERCEL) {
+    return {
+      mode: "serverless",
+      dataDir: DATA_DIR,
+      projectsDir: PROJECTS_DIR,
+      ephemeral: true,
+      web,
+    };
+  }
+  return {
+    mode: "desktop",
+    platform: process.platform,
+    dataDir: DATA_DIR,
+    projectsDir: PROJECTS_DIR,
+    configFile: CONFIG_FILE,
+    insightsDir: INSIGHTS_DIR,
+    windows: process.platform === "win32" ? {
+      appData: process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+      localAppData: process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+    } : null,
+    web,
+  };
+}
+
 /* ── Config ──────────────────────────────────────────────────── */
 const PORT           = parseInt(process.env.PORT || "3200", 10);
 const OLLAMA_HOST    = process.env.OLLAMA_HOST    || "http://127.0.0.1:11434";
 const DEFAULT_MODEL  = process.env.DEFAULT_MODEL  || "mistral:latest";
-const PROJECTS_DIR   = process.env.PROJECTS_DIR   || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), "gruda-projects");
+const PROJECTS_DIR   = defaultProjectsDir();
 const BRAVE_KEY      = process.env.BRAVE_SEARCH_KEY || "";
 const SPLASH_GIF_1   = process.env.SPLASH_GIF_1  || "";
 const SPLASH_GIF_2   = process.env.SPLASH_GIF_2  || "";
@@ -67,7 +128,7 @@ const ELEVEN_BASE    = "https://api.elevenlabs.io";
 const XAI_KEY = process.env.XAI_API_KEY || "";
 
 /* ── Data dirs ────────────────────────────────────── */
-const DATA_DIR     = process.env.DATA_DIR || path.join(process.env.VERCEL ? os.tmpdir() : os.homedir(), ".gruda-agent");
+const DATA_DIR     = defaultDataDir();
 const CONFIG_FILE  = path.join(DATA_DIR, "config.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const INSIGHTS_DIR = path.join(DATA_DIR, "insights");
@@ -240,6 +301,15 @@ app.get("/install-linux.sh", (req, res) => {
 app.get("/install-windows.bat", (req, res) => {
   res.type("application/octet-stream");
   res.sendFile(path.join(PUBLIC_DIR, "install-windows.bat"));
+});
+app.get("/manifest.webmanifest", (req, res) => {
+  res.type("application/manifest+json");
+  res.sendFile(path.join(PUBLIC_DIR, "manifest.webmanifest"));
+});
+app.get("/sw.js", (req, res) => {
+  res.type("application/javascript");
+  res.setHeader("Service-Worker-Allowed", "/");
+  res.sendFile(path.join(PUBLIC_DIR, "sw.js"));
 });
 app.use(express.static(PUBLIC_DIR));
 
@@ -1016,10 +1086,16 @@ app.get("/api/health", async (_req, res) => {
     grudgeAi: grudgeAiHub.listHubModels().length > 0,
     skills: _bundledSkills.length,
     serverless: !!process.env.VERCEL,
+    storage: describeStoragePaths(),
+    pwa: true,
     db: pgReady,
     music: !!MUREKA_KEY,
     voice: !!ELEVEN_KEY,
   });
+});
+
+app.get("/api/app/paths", (_req, res) => {
+  res.json(describeStoragePaths());
 });
 
 

@@ -6,6 +6,11 @@
 <title>GRUDA Agent — Grudge Studio</title>
 <meta name="description" content="GRUDA Agent — agentic AI workspace by Grudge Studio (local Ollama or free Puter cloud) with music, voice, IDE, and a worker orchestrator.">
 <meta name="theme-color" content="#ff6b00">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GRUDA Agent">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="/gruda-king.svg">
 <link rel="icon" type="image/png" href="/gruda-king.png">
@@ -19,6 +24,8 @@
 <meta name="twitter:image" content="/gruda-king.png">
 <script src="https://js.puter.com/v2/" async></script>
 <script src="/local-store.js"></script>
+<script src="/pwa-install.js"></script>
+<script src="/appdata.js"></script>
 <script src="/ollama-client.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
@@ -57,6 +64,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .splash-loader{margin-top:24px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.78rem;}
 .splash-enter{margin-top:18px;padding:10px 32px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:.9rem;font-weight:700;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;display:none;transition:background .2s;}
 .splash-enter:hover{background:var(--accent2);}
+.splash-install{margin-top:10px;padding:8px 24px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;font-weight:600;cursor:pointer;display:none;transition:all .2s;}
+.splash-install:hover{border-color:var(--accent);color:var(--accent);}
+.pwa-badge{font-size:.55rem;color:var(--green);letter-spacing:.08em;text-transform:uppercase;margin-top:4px;display:none;}
+.path-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:.72rem;margin-bottom:10px;}
+.path-row{margin-bottom:6px;line-height:1.45;}
+.path-row code{color:var(--gold);word-break:break-all;}
+.path-label{display:block;color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px;}
+.path-hint{color:var(--muted);margin-top:6px;font-size:.68rem;}
+.agent-runs{max-height:140px;overflow-y:auto;font-size:.72rem;color:var(--muted);}
+.agent-run-row{padding:5px 0;border-bottom:1px solid var(--border);}
+.agent-run-row:last-child{border-bottom:none;}
+.agent-run-title{color:var(--text);font-weight:600;}
 
 /* ── ONBOARDING ── */
 #onboarding{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:900;display:none;align-items:center;justify-content:center;}
@@ -357,6 +376,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div class="splash-loader" id="splash-loader">
     <div class="dots"><span></span><span></span><span></span></div> Loading…
   </div>
+  <button class="splash-install" id="splash-install" data-pwa-install onclick="installWebApp()">⬇ Install Web App</button>
   <button class="splash-enter" id="splash-enter">Enter Workspace →</button>
 </div>
 
@@ -449,7 +469,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div id="sidebar">
     <div class="logo-wrap">
       <div class="logo-mark">GRUDA</div>
-      <div class="logo-tag">Agent<br>Grudge Studio</div>
+      <div class="logo-tag">Agent<br>Grudge Studio<div class="pwa-badge" id="pwa-badge" data-pwa-installed>● Installed app</div></div>
     </div>
     <button id="new-chat-btn" onclick="newChat()">+ New Chat</button>
     <div class="sb-label">Model</div>
@@ -742,14 +762,39 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
         </div>
 
-        <h3>Desktop / Linux Install</h3>
+        <h3>Install Web App (PWA)</h3>
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
-          One command on Linux: <code style="color:var(--gold)">curl -fsSL https://ai.grudge-studio.com/install-linux.sh | bash</code><br>
-          Or generate a launcher that runs <code>npx gruda-agent</code> (no manual clone required).
+          Install GRUDA Agent to your desktop or phone — works offline for the shell, stores data in browser IndexedDB.
+          On Windows desktop, pair with the local agent for AppData file persistence.
+        </div>
+        <div class="launcher-row" style="margin-bottom:10px">
+          <button class="int-btn primary" data-pwa-install onclick="installWebApp()">⬇ Install to this device</button>
+          <span data-pwa-installed style="display:none;font-size:.75rem;color:var(--green)">✓ Running as installed app</span>
+        </div>
+
+        <h3>Local Storage Paths</h3>
+        <div class="path-panel" id="appdata-paths">Loading storage paths…</div>
+        <div class="launcher-row" style="margin-bottom:10px">
+          <button class="int-btn" onclick="exportWorkspace()">⬇ Export workspace JSON</button>
+          <label class="int-btn" style="cursor:pointer;margin:0">
+            ⬆ Import workspace
+            <input type="file" accept="application/json,.json" style="display:none" onchange="importWorkspaceFile(this)">
+          </label>
+        </div>
+
+        <h3>Recent Agent Runs</h3>
+        <div class="agent-runs" id="agent-runs-list">No agent runs logged yet.</div>
+
+        <h3 style="margin-top:14px">Desktop / Linux Install</h3>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
+          Windows uses <code style="color:var(--gold)">%APPDATA%\GrudgeStudio\gruda-agent</code> for config and insights.<br>
+          Linux: <code style="color:var(--gold)">curl -fsSL https://ai.grudge-studio.com/install-linux.sh | bash</code><br>
+          Or download the official installer / generate a launcher.
         </div>
         <div class="launcher-row">
           <input id="launcher-name" placeholder="Your name (optional)">
-          <button class="int-btn primary" onclick="downloadLauncher('windows')">⬇ Windows .bat</button>
+          <a class="int-btn primary" href="/install-windows.bat" download="install-gruda-agent.bat">⬇ Windows installer</a>
+          <button class="int-btn" onclick="downloadLauncher('windows')">⬇ Quick .bat</button>
           <button class="int-btn" onclick="downloadLauncher('linux')">⬇ Linux .sh</button>
         </div>
 
@@ -855,6 +900,16 @@ const LocalSave = {
     if (!this.enabled()) return;
     try { await this.store().appendHistory(session); } catch (e) {}
     fetch("/api/history", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(session) }).catch(()=>{});
+  },
+
+  async appendAgentRun(run) {
+    if (!this.enabled()) return null;
+    try { return await this.store().appendAgentRun(run); } catch (e) { return null; }
+  },
+
+  async listAgentRuns(limit) {
+    if (!this.enabled()) return [];
+    try { return await this.store().listAgentRuns(limit || 20); } catch (e) { return []; }
   },
 };
 
@@ -1090,6 +1145,10 @@ async function initApp(hydrated) {
   try { GrudgeAuth.restore(); } catch(e){}
   if (window.GrudgeFleetConnect) GrudgeFleetConnect.mount("#grudge-fleet-connect");
   setInterval(checkHealth,15000);
+  try { GrudaPwa?.updateInstallUI?.(); } catch(e){}
+  const params = new URLSearchParams(location.search);
+  if (params.get("tab")) showTab(params.get("tab"));
+  if (params.get("mode") === "agent") setMode("agent");
 }
 
 async function runFleetMismatch(){
@@ -1338,7 +1397,7 @@ function showTab(tab) {
     document.getElementById("tab-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("nav-"+t)?.classList.toggle("active",t===tab);
   });
-  if(tab==="cloud")  loadIntegrations();
+  if(tab==="cloud")  { loadIntegrations(); refreshCloudStorageUI(); }
   if(tab==="treaty") { updateTreatyAccountHint(); initTreaty(); }
   if(tab==="ide")    { initMonaco(); refreshTree(); }
   if(tab==="assets") loadAssets();
@@ -2012,6 +2071,8 @@ async function runAgent() {
   const think=addThink("Running agent…");
   const {msgEl,bodyEl,toolsEl}=addAgentMsg(true);
   let full="";
+  const runStarted = Date.now();
+  const toolCalls = [];
   try {
     const useClientOllama = isOllamaModel(currentModel) && window._clientOllama && GrudaOllama?.available;
     if (useClientOllama) {
@@ -2024,7 +2085,7 @@ async function runAgent() {
         tools: tools.tools || [],
         onEvent: (d) => {
           if (d.type === "token") { full += d.content; bodyEl.innerHTML = mdToHtml(full); scrollBot(); }
-          else if (d.type === "tool_call") addToolCall(toolsEl, d);
+          else if (d.type === "tool_call") { toolCalls.push(d.tool); addToolCall(toolsEl, d); }
           else if (d.type === "tool_result") addToolResult(toolsEl, d);
           else if (d.type === "error") addErr(bodyEl, d.message);
         },
@@ -2052,7 +2113,7 @@ async function runAgent() {
           try {
             const d=JSON.parse(raw);
             if(d.type==="token"){ full+=d.content; bodyEl.innerHTML=mdToHtml(full); scrollBot(); }
-            else if(d.type==="tool_call"){ addToolCall(toolsEl,d); }
+            else if(d.type==="tool_call"){ toolCalls.push(d.tool); addToolCall(toolsEl,d); }
             else if(d.type==="tool_result"){ addToolResult(toolsEl,d); }
             else if(d.type==="error"){ addErr(bodyEl,d.message); }
           } catch(e){}
@@ -2065,6 +2126,18 @@ async function runAgent() {
       if (mem) await LocalSave.saveProjectMemory(activeProj.name, mem);
     }
   } catch(e){ addErr(bodyEl,"Agent error: "+e.message); }
+  const runOk = !!(full && !String(full).startsWith("Error"));
+  await LocalSave.appendAgentRun({
+    title: messages[messages.length - 1]?.content?.slice(0, 80) || "Agent run",
+    project: activeProj?.name || "",
+    model: currentModel,
+    tools: [...new Set(toolCalls)],
+    toolCount: toolCalls.length,
+    summary: (full || "").slice(0, 240),
+    durationMs: Date.now() - runStarted,
+    ok: runOk,
+  });
+  refreshAgentRunsUI();
   isStreaming=false; setSend(false); scrollBot();
   maybeGrowInsights();
   if (messages.length >= 4) {
@@ -2273,6 +2346,53 @@ function puterUploadProject(){ alert("Cloud project upload is coming soon."); }
 // Cloud & Deploy tab opener: refresh the login card + saved integration badges.
 function loadIntegrations(){ try { GrudgeAuth.updateUI(); refreshIntegrationsUI(); } catch(e){} }
 
+async function installWebApp() {
+  try {
+    const r = await GrudaPwa?.promptInstall?.();
+    if (r?.ok) cloudLog("Web app installed — GRUDA Agent added to your device.");
+    else if (r?.reason === "unavailable") cloudLog("Install unavailable here — use browser menu: Install app / Add to Home Screen.");
+    else cloudLog("Install dismissed — you can install later from Cloud & Deploy.");
+  } catch (e) { cloudLog("Install failed: " + e.message); }
+}
+
+async function exportWorkspace() {
+  try {
+    const name = await GrudaAppData.exportWorkspace();
+    cloudLog("Exported workspace → " + name);
+  } catch (e) { cloudLog("Export failed: " + e.message); }
+}
+
+async function importWorkspaceFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    await GrudaAppData.importWorkspace(file);
+    cloudLog("Imported workspace — reloading…");
+    input.value = "";
+    location.reload();
+  } catch (e) { cloudLog("Import failed: " + e.message); }
+}
+
+async function refreshAgentRunsUI() {
+  const el = document.getElementById("agent-runs-list");
+  if (!el) return;
+  const runs = await LocalSave.listAgentRuns(12);
+  if (!runs.length) { el.textContent = "No agent runs logged yet."; return; }
+  el.innerHTML = runs.map((r) => {
+    const when = r.savedAt ? new Date(r.savedAt).toLocaleString() : "";
+    const tools = (r.tools || []).slice(0, 4).join(", ");
+    return `<div class="agent-run-row"><div class="agent-run-title">${esc(r.title || "Agent run")}</div>
+      <div>${esc(r.project || "—")} · ${esc(r.model || "")} · ${r.toolCount || 0} tools · ${Math.round((r.durationMs || 0) / 1000)}s ${r.ok ? "✓" : "⚠"}</div>
+      <div>${esc(when)}${tools ? " · " + esc(tools) : ""}</div></div>`;
+  }).join("");
+}
+
+async function refreshCloudStorageUI() {
+  try { await GrudaAppData?.refreshPathsUI?.("appdata-paths"); } catch(e){}
+  await refreshAgentRunsUI();
+  try { GrudaPwa?.updateInstallUI?.(); } catch(e){}
+}
+
 /* ══════════════════════════════════════════════════════════
    CORE HANDLERS — previously referenced by the markup but never
    defined (dead buttons). Defined here so every control works.
@@ -2383,7 +2503,7 @@ function downloadLauncher(osName){
   const label=name?(" for "+name):"";
   let content, filename;
   if(osName==="windows"){
-    content="@echo off\r\nREM GRUDA Agent launcher"+label+"\r\ntitle GRUDA Agent\r\necho Starting GRUDA Agent...\r\nstart \"\" http://127.0.0.1:3200\r\nnpx --yes gruda-agent@latest --port 3200 --no-open\r\npause\r\n";
+    content="@echo off\r\nREM GRUDA Agent launcher"+label+"\r\nREM Data: %APPDATA%\\GrudgeStudio\\gruda-agent\r\ntitle GRUDA Agent\r\necho Starting GRUDA Agent...\r\nstart \"\" http://127.0.0.1:3200\r\nnpx --yes gruda-agent@latest --port 3200 --no-open\r\npause\r\n";
     filename="start-gruda-agent.bat";
   } else {
     content="#!/usr/bin/env bash\n# GRUDA Agent launcher"+label+"\nset -e\nif ! command -v node >/dev/null 2>&1; then echo 'Install Node.js 18+ from https://nodejs.org'; exit 1; fi\n(command -v xdg-open >/dev/null 2>&1 && (sleep 2 && xdg-open http://127.0.0.1:3200) &) || true\nexec npx --yes gruda-agent@latest --port 3200 --no-open\n";

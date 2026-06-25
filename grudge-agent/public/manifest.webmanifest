@@ -1,0 +1,22 @@
+{
+  "name": "GRUDA Agent",
+  "short_name": "GRUDA",
+  "description": "Agentic AI workspace by Grudge Studio — local Ollama, tools, memory, and Treaty chat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08080f",
+  "theme_color": "#ff6b00",
+  "categories": ["productivity", "developer"],
+  "icons": [
+    { "src": "/gruda-king.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/gruda-king.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/gruda-king.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "New chat", "short_name": "Chat", "url": "/?tab=ai", "icons": [{ "src": "/gruda-king.png", "sizes": "96x96" }] },
+    { "name": "Agent mode", "short_name": "Agent", "url": "/?tab=ai&mode=agent", "icons": [{ "src": "/gruda-king.png", "sizes": "96x96" }] },
+    { "name": "Treaty chat", "short_name": "Treaty", "url": "/?tab=treaty", "icons": [{ "src": "/gruda-king.png", "sizes": "96x96" }] }
+  ]
+}

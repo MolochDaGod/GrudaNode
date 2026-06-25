@@ -15,11 +15,27 @@ const NO_OPEN = args.includes("--no-open");
 
 const ROOT = path.join(__dirname, "..");
 
-const homeEnv = path.join(os.homedir(), ".gruda-agent", ".env");
+function defaultDataDir() {
+  const plat = process.platform;
+  if (plat === "win32") {
+    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, "GrudgeStudio", "gruda-agent");
+  }
+  if (plat === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "GrudgeStudio", "gruda-agent");
+  }
+  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(xdg, "gruda-agent");
+}
+
+const homeEnv = path.join(defaultDataDir(), ".env");
+const legacyEnv = path.join(os.homedir(), ".gruda-agent", ".env");
 const envFile = path.join(ROOT, ".env");
 const envEx   = path.join(ROOT, ".env.example");
 if (fs.existsSync(homeEnv)) {
   require("dotenv").config({ path: homeEnv });
+} else if (fs.existsSync(legacyEnv)) {
+  require("dotenv").config({ path: legacyEnv });
 } else if (!fs.existsSync(envFile) && fs.existsSync(envEx)) {
   fs.copyFileSync(envEx, envFile);
   console.log("[gruda-agent] Created .env from .env.example");
@@ -52,7 +68,7 @@ async function main() {
       o.unref();
       await new Promise((r) => setTimeout(r, 3000));
       if (!(await ollamaUp())) {
-        console.log("  [!] Ollama unavailable. Use Puter models in-browser or set GRUDGE_AI_KEY in ~/.gruda-agent/.env");
+        console.log("  [!] Ollama unavailable. Use Puter models in-browser or set GRUDGE_AI_KEY in " + defaultDataDir() + "/.env");
       }
     } catch {
       console.log("  [!] Ollama not installed. Install from https://ollama.com or use cloud models.");

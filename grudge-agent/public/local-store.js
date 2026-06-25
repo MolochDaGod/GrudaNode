@@ -4,8 +4,8 @@
  */
 (function (global) {
   const DB_NAME = "gruda-agent-local";
-  const DB_VER = 1;
-  const STORES = ["config", "projects", "memory", "insights", "history", "meta"];
+  const DB_VER = 2;
+  const STORES = ["config", "projects", "memory", "insights", "history", "meta", "agentRuns"];
 
   let dbPromise = null;
 
@@ -148,6 +148,27 @@
       }
     },
 
+    async appendAgentRun(run) {
+      const id = run.id || `run-${Date.now()}`;
+      const row = { ...run, id, savedAt: run.savedAt || Date.now() };
+      await idbSet("agentRuns", id, row);
+      const all = await LocalStore.listAgentRuns(100);
+      if (all.length > 80) {
+        const drop = all.slice(80);
+        const db = await openDb();
+        const tx = db.transaction("agentRuns", "readwrite");
+        for (const r of drop) tx.objectStore("agentRuns").delete(r.id);
+      }
+      return row;
+    },
+
+    async listAgentRuns(limit = 30) {
+      const rows = await idbGetAll("agentRuns");
+      return rows
+        .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))
+        .slice(0, limit);
+    },
+
     async getMeta(key) {
       return await idbGet("meta", key);
     },
@@ -159,12 +180,13 @@
     /** Export everything as a portable JSON blob (for backup / desktop sync). */
     async exportAll() {
       return {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         config: await LocalStore.getConfig(),
         projects: await LocalStore.listProjects(),
         insights: await LocalStore.getAllInsights(),
         history: await LocalStore.listHistory(),
+        agentRuns: await LocalStore.listAgentRuns(80),
         memory: Object.fromEntries(
           await Promise.all(
             (await idbKeys("memory")).map(async (k) => [k, await LocalStore.getMemory(k)])
@@ -184,6 +206,7 @@
         }
       }
       for (const s of blob.history || []) await LocalStore.appendHistory(s);
+      for (const r of blob.agentRuns || []) await LocalStore.appendAgentRun(r);
       return true;
     },
   };
