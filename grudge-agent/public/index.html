@@ -727,7 +727,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
             <button class="int-btn primary" onclick="puterSignIn()"><img src="/gruda-king.png" alt="" class="gruda-ico" style="height:1em;width:1em;vertical-align:-0.15em"> Sign in with Grudge</button>
           </div>
           <div id="puter-actions" style="display:none;flex-direction:column;gap:6px;">
-            <button class="int-btn" onclick="puterUploadProject()">Upload project to cloud</button>
+            <button class="int-btn primary" onclick="openPuterSpace()">Open cloud storage &amp; deploy</button>
+            <button class="int-btn" onclick="puterUploadProject()">Upload active project</button>
+            <button class="int-btn" onclick="puterDeployProject()">Deploy project to *.puter.site</button>
             <button class="int-btn danger" onclick="puterSignOut()">Sign out</button>
           </div>
         </div>
@@ -740,7 +742,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           <div class="int-desc">Characters, home-island, Puter cloud saves, and Grudge ID — linked across the fleet.</div>
           <div id="grudge-fleet-connect" data-grudge-fleet-connect style="margin:8px 0"></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <a class="int-btn" href="https://grudge-studio.puter.site" target="_blank" rel="noreferrer">Puter Cloud</a>
+            <a class="int-btn" href="/puter-space" target="_blank" rel="noreferrer">Cloud storage &amp; deploy</a>
+            <a class="int-btn" href="https://grudge-studio.puter.site" target="_blank" rel="noreferrer">Legacy Puter dashboard</a>
             <a class="int-btn" href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>
             <button class="int-btn" onclick="runFleetMismatch()">Fleet mismatch audit</button>
           </div>
@@ -837,6 +840,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
         </div>
 
+        <h3>Linux / cloud deployment space</h3>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
+          Your Puter cloud space works from any Linux browser — no install. Sign in above, then open
+          <a href="/puter-space" style="color:var(--gold)">Cloud storage &amp; deploy</a> to browse <code>/grudge-studio</code>, upload exports, and host at <code>*.puter.site</code>.
+        </div>
+
         <h3>AI Orchestrator</h3>
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
           Multi-worker orchestration with Forge, Mine-Loader tools, Puter workers, and Ollama fallback.
@@ -866,7 +875,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <h3>Recent Agent Runs</h3>
         <div class="agent-runs" id="agent-runs-list">No agent runs logged yet.</div>
 
-        <h3 style="margin-top:14px">Desktop / Linux Install</h3>
+        <h3 style="margin-top:14px">Optional local agent install</h3>
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">
           Windows uses <code style="color:var(--gold)">%APPDATA%\GrudgeStudio\gruda-agent</code> for config and insights.<br>
           Linux: <code style="color:var(--gold)">curl -fsSL https://ai.grudge-studio.com/install-linux.sh | bash</code><br>
@@ -2446,7 +2455,105 @@ const GrudgeAuth = {
 };
 function puterSignIn(){ return GrudgeAuth.signIn(); }
 function puterSignOut(){ return GrudgeAuth.signOut(); }
-function puterUploadProject(){ alert("Cloud project upload is coming soon."); }
+
+const PUTER_CLOUD_ROOT = "grudge-studio";
+const PUTER_EXPORTS = PUTER_CLOUD_ROOT + "/exports";
+
+function puterSlug(s){
+  return String(s||"").toLowerCase().replace(/[^a-z0-9-]/g,"-").replace(/-+/g,"-").replace(/^-|-$/g,"").slice(0,48);
+}
+async function ensurePuterAuth(){
+  if(typeof puter==="undefined"){ cloudLog("Puter SDK not loaded — check your connection."); return false; }
+  if(!(puter.auth&&puter.auth.isSignedIn&&puter.auth.isSignedIn())){
+    await GrudgeAuth.signIn();
+  }
+  return !!(puter.auth&&puter.auth.isSignedIn&&puter.auth.isSignedIn());
+}
+async function ensurePuterBuckets(){
+  try{ await puter.fs.mkdir(PUTER_CLOUD_ROOT); }catch(e){}
+  for(const b of ["assets","configs","game-data","player-data","exports","backups","deployments"]){
+    try{ await puter.fs.mkdir(PUTER_CLOUD_ROOT+"/"+b); }catch(e){}
+  }
+}
+async function collectProjectFiles(){
+  const name = activeProj?.name;
+  if(!name) return [];
+  let files = [];
+  try{
+    const r = await fetch("/api/projects/"+encodeURIComponent(name)+"/files");
+    if(r.ok){ const d = await r.json(); files = d.files||[]; }
+  }catch(e){}
+  if(!files.length){
+    let mem = "";
+    if(LocalSave.enabled()) mem = await LocalSave.getMemory(name);
+    else {
+      try{
+        const d = await fetch("/api/projects/"+encodeURIComponent(name)+"/memory").then(x=>x.json());
+        mem = d.content||"";
+      }catch(e){}
+    }
+    if(mem) files.push({ filePath:"gruda.md", content:mem });
+    for(const [p,c] of Object.entries(openFiles||{})) files.push({ filePath:p, content:c });
+  }
+  return files;
+}
+async function puterRecordActivity(action){
+  try{
+    let lg = await puter.kv.get("grudge_activity_log")||[];
+    if(typeof lg==="string") lg = JSON.parse(lg);
+    if(!Array.isArray(lg)) lg = [];
+    const u = await puter.auth.getUser();
+    lg.unshift({ timestamp:new Date().toISOString(), username:u.username, action, app:"gruda-agent" });
+    if(lg.length>100) lg.length=100;
+    await puter.kv.set("grudge_activity_log", lg);
+  }catch(e){}
+}
+function openPuterSpace(){
+  const tok = (typeof puter!=="undefined" && puter.authToken) ? puter.authToken : "";
+  const url = "/puter-space" + (tok ? "?grudge_token="+encodeURIComponent(tok) : "");
+  window.open(url, "_blank", "noopener");
+}
+async function puterUploadProject(){
+  if(!activeProj){ cloudLog("Select a project first."); return; }
+  if(!(await ensurePuterAuth())) return;
+  const files = await collectProjectFiles();
+  if(!files.length){ cloudLog("No files to upload for "+activeProj.name+"."); return; }
+  await ensurePuterBuckets();
+  const dest = PUTER_EXPORTS+"/"+puterSlug(activeProj.name);
+  try{ await puter.fs.mkdir(dest); }catch(e){}
+  cloudLog("Uploading "+files.length+" file(s) to Puter /"+dest+" …");
+  let ok = 0;
+  for(const {filePath,content} of files){
+    try{ await puter.fs.write(dest+"/"+filePath.replace(/\\/g,"/"), content); ok++; }
+    catch(e){ cloudLog("  failed "+filePath+": "+e.message); }
+  }
+  const manifest = { project:activeProj.name, grudgeId:GrudgeAuth.user?.grudgeId||null, uploadedAt:new Date().toISOString(), files:files.map(f=>f.filePath) };
+  await puter.fs.write(dest+"/.gruda-manifest.json", JSON.stringify(manifest,null,2));
+  await puter.kv.add("grudge:projects", { [activeProj.name]: { path:dest, at:Date.now() } });
+  await puterRecordActivity("upload:"+activeProj.name);
+  cloudLog("Uploaded "+ok+"/"+files.length+" → /"+dest+". Open Cloud storage & deploy to browse.");
+}
+async function puterDeployProject(){
+  if(!activeProj){ cloudLog("Select a project first."); return; }
+  if(!(await ensurePuterAuth())) return;
+  if(!puter.hosting?.create){ cloudLog("Puter hosting API unavailable."); return; }
+  const files = await collectProjectFiles();
+  const hasIndex = files.some(f=>f.filePath==="index.html"||f.filePath.endsWith("/index.html"));
+  if(!hasIndex){ cloudLog("Deploy needs an index.html in the project. Upload first, or add index.html."); return; }
+  await puterUploadProject();
+  const dest = PUTER_EXPORTS+"/"+puterSlug(activeProj.name);
+  const u = await puter.auth.getUser();
+  let sub = puterSlug((u.username||"grudge")+"-"+activeProj.name);
+  cloudLog("Creating site "+sub+".puter.site from /"+dest+" …");
+  try{
+    const sites = await puter.hosting.list().catch(()=>[]);
+    const exists = Array.isArray(sites)&&sites.find(s=>(s.subdomain||s.name)===sub);
+    if(!exists) await puter.hosting.create(sub, dest);
+    await puter.kv.add("grudge:deploys", { [sub]: { dir:dest, project:activeProj.name, at:Date.now() } });
+    await puterRecordActivity("deploy:"+sub);
+    cloudLog("Live: https://"+sub+".puter.site");
+  }catch(e){ cloudLog("Deploy failed: "+e.message); }
+}
 // Cloud & Deploy tab opener: refresh the login card + saved integration badges.
 function loadIntegrations(){ try { GrudgeAuth.updateUI(); refreshIntegrationsUI(); } catch(e){} }
 

@@ -321,6 +321,9 @@ app.get("/sw.js", (req, res) => {
   res.setHeader("Service-Worker-Allowed", "/");
   res.sendFile(path.join(PUBLIC_DIR, "sw.js"));
 });
+app.get(["/puter-space", "/cloud"], (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "puter-space.html"));
+});
 app.use(express.static(PUBLIC_DIR));
 
 /* ── Uploads (multipart) ─────────────────────────────────────── */

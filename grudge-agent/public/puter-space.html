@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Grudge Studio — Cloud Storage &amp; Deploy</title>
+<meta name="description" content="Puter cloud storage and deployment space for Grudge Studio — works on Linux, Mac, and Windows from any browser.">
+<script src="https://js.puter.com/v2/"></script>
+<script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
+<style>
+:root{--p:#00ff88;--s:#66aaff;--gold:#ffb700;--bg:rgba(0,4,40,0.65);--bd:rgba(0,255,136,0.25)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#000428,#001a4d,#000428);background-attachment:fixed;color:var(--p);min-height:100vh;line-height:1.5}
+.c{max-width:960px;margin:0 auto;padding:20px}
+h1{text-align:center;font-size:2rem;text-shadow:0 0 30px rgba(0,255,136,0.5);margin-bottom:6px}
+.sub{text-align:center;color:var(--s);margin-bottom:20px;font-size:0.9em}
+.card{background:var(--bg);backdrop-filter:blur(12px);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:14px}
+.card h3{color:var(--s);margin-bottom:10px;border-bottom:1px solid var(--bd);padding-bottom:8px;font-size:0.95rem}
+.ab{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.btn{background:linear-gradient(135deg,rgba(0,78,146,0.7),rgba(0,4,40,0.7));border:1px solid var(--bd);border-radius:8px;padding:8px 14px;color:var(--p);cursor:pointer;font-size:0.85rem;transition:all 0.2s}
+.btn:hover{background:linear-gradient(135deg,var(--p),var(--s));color:#000428}
+.btn.primary{border-color:var(--gold);color:var(--gold)}
+.btn.danger{border-color:#ff4757;color:#ff8a8a}
+.fi{display:flex;justify-content:space-between;align-items:center;padding:7px 8px;border-bottom:1px solid rgba(0,255,136,0.08);font-size:0.85em;cursor:pointer;border-radius:4px}
+.fi:hover{background:rgba(0,255,136,0.06)}
+.fs-box{min-height:120px;max-height:280px;overflow-y:auto;background:rgba(0,0,0,0.3);border:1px solid var(--bd);border-radius:8px;padding:10px}
+.bc{margin-bottom:8px;color:var(--s);font-size:0.85em}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+input[type=text]{background:rgba(0,0,0,0.5);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;color:var(--p);font-size:0.85rem;flex:1;min-width:140px}
+.log{font-size:0.78rem;color:var(--s);background:rgba(0,0,0,0.35);border:1px solid var(--bd);border-radius:8px;padding:10px;max-height:120px;overflow-y:auto;white-space:pre-wrap}
+.site-row{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid rgba(102,170,255,0.12);font-size:0.85em}
+.site-row a{color:var(--gold)}
+.ft{text-align:center;margin-top:20px;padding:14px;border-top:1px solid var(--bd);color:var(--s);font-size:0.8em}
+.ft a{color:var(--p)}
+.badge{font-size:0.72rem;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--s)}
+.badge.on{border-color:var(--p);color:var(--p)}
+@media(max-width:600px){h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<div class="c">
+  <h1>Grudge Studio Cloud</h1>
+  <p class="sub">Puter storage &amp; deploy — your Linux-friendly cloud space (no install, user-pays)</p>
+
+  <div class="card">
+    <div class="ab">
+      <span id="auth-label">Not signed in</span>
+      <span class="badge" id="auth-badge">offline</span>
+      <div class="row" style="margin:0">
+        <button class="btn primary" onclick="toggleAuth()">Sign in with Grudge</button>
+        <a class="btn" href="https://ai.grudge-studio.com/?tab=cloud" style="text-decoration:none">← GRUDA Agent</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Cloud Storage</h3>
+    <div class="bc" id="bc">/grudge-studio</div>
+    <div class="fs-box" id="fs">Sign in to browse your cloud files…</div>
+    <div class="row">
+      <button class="btn" onclick="refreshDir()">Refresh</button>
+      <button class="btn" onclick="newFolder()">New folder</button>
+      <button class="btn" onclick="pickUpload()">Upload files</button>
+      <input type="file" id="file-up" multiple style="display:none" onchange="doUpload(event)">
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Deploy to Puter Site</h3>
+    <p style="font-size:0.82rem;color:var(--s);margin-bottom:10px">
+      Host any folder under your cloud as <code>https://&lt;name&gt;.puter.site</code> — ideal for static games and web exports.
+    </p>
+    <div class="row">
+      <input type="text" id="deploy-sub" placeholder="subdomain (e.g. my-game)">
+      <input type="text" id="deploy-dir" placeholder="folder path (current dir)" readonly>
+    </div>
+    <div class="row">
+      <button class="btn primary" onclick="deployCurrent()">Deploy this folder</button>
+      <button class="btn" onclick="listSites()">List my sites</button>
+    </div>
+    <div id="sites" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Activity</h3>
+    <div class="log" id="log">Ready.</div>
+  </div>
+
+  <div class="ft">
+    <p>Grudge Studio v3.1 · Puter Cloud Edition</p>
+    <p><a href="https://grudachain.grudge-studio.com">Nexus</a> · <a href="https://grudgewarlords.com">Grudge Warlords</a> · <a href="https://objectstore.grudge-studio.com/health">ObjectStore</a></p>
+  </div>
+</div>
+
+<script>
+const ROOT = "grudge-studio";
+const BUCKETS = ["assets", "configs", "game-data", "player-data", "exports", "backups", "deployments"];
+const KV = { profile: "grudge_studio_profile", activity: "grudge_activity_log" };
+
+let signedIn = false;
+let user = null;
+let cwd = ROOT;
+
+function log(msg) {
+  const el = document.getElementById("log");
+  const line = new Date().toLocaleTimeString() + "  " + msg;
+  el.textContent = line + "\n" + el.textContent;
+}
+
+function slug(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+}
+
+function setAuthUI(on) {
+  document.getElementById("auth-badge").textContent = on ? "signed in" : "offline";
+  document.getElementById("auth-badge").classList.toggle("on", on);
+}
+
+async function waitPuter(ms = 8000) {
+  const t0 = Date.now();
+  while (typeof puter === "undefined" && Date.now() - t0 < ms) {
+    await new Promise(r => setTimeout(r, 120));
+  }
+  return typeof puter !== "undefined";
+}
+
+async function applyTokenFromUrl() {
+  try {
+    const u = new URL(location.href);
+    const tok = u.searchParams.get("grudge_token") || u.searchParams.get("puter_token");
+    if (!tok) return;
+    if (puter?.setAuthToken) puter.setAuthToken(tok);
+    ["grudge_token", "puter_token"].forEach(k => u.searchParams.delete(k));
+    history.replaceState(null, "", u.toString());
+  } catch (e) {}
+}
+
+async function ensureBuckets() {
+  try { await puter.fs.mkdir(ROOT); } catch (e) {}
+  for (const b of BUCKETS) {
+    try { await puter.fs.mkdir(`${ROOT}/${b}`); } catch (e) {}
+  }
+}
+
+async function recordActivity(action) {
+  if (!signedIn || !user) return;
+  try {
+    let lg = await puter.kv.get(KV.activity) || [];
+    if (typeof lg === "string") lg = JSON.parse(lg);
+    if (!Array.isArray(lg)) lg = [];
+    lg.unshift({ timestamp: new Date().toISOString(), username: user.username, action, app: "grudge-puter-space" });
+    if (lg.length > 100) lg.length = 100;
+    await puter.kv.set(KV.activity, lg);
+  } catch (e) {}
+}
+
+async function onSignedIn() {
+  user = await puter.auth.getUser();
+  signedIn = true;
+  document.getElementById("auth-label").textContent = `Signed in: ${user.username}`;
+  setAuthUI(true);
+  await ensureBuckets();
+  document.getElementById("deploy-dir").value = cwd;
+  await browse(cwd);
+  await listSites();
+  await recordActivity("login");
+  log("Cloud space ready at /" + ROOT);
+}
+
+async function toggleAuth() {
+  if (!(await waitPuter())) { alert("Puter SDK failed to load — check your connection."); return; }
+  try {
+    if (puter.auth.isSignedIn()) {
+      await puter.auth.signOut();
+      signedIn = false;
+      user = null;
+      document.getElementById("auth-label").textContent = "Not signed in";
+      setAuthUI(false);
+      document.getElementById("fs").innerHTML = "Sign in to browse your cloud files…";
+      document.getElementById("sites").innerHTML = "";
+      log("Signed out.");
+      return;
+    }
+    await puter.auth.signIn();
+    await onSignedIn();
+  } catch (e) {
+    alert("Auth failed: " + e.message);
+  }
+}
+
+async function browse(path) {
+  if (!signedIn) return;
+  cwd = path;
+  document.getElementById("deploy-dir").value = cwd;
+  const bc = document.getElementById("bc");
+  bc.innerHTML = "";
+  const parts = path.split("/");
+  let acc = "";
+  parts.forEach((p, i) => {
+    acc += (i ? "/" : "") + p;
+    if (i) bc.appendChild(document.createTextNode(" / "));
+    const sp = document.createElement("span");
+    sp.textContent = p;
+    sp.style.cursor = "pointer";
+    sp.style.color = "var(--s)";
+    const target = acc;
+    sp.onclick = () => browse(target);
+    bc.appendChild(sp);
+  });
+
+  const box = document.getElementById("fs");
+  box.innerHTML = "Loading…";
+  try {
+    const items = await puter.fs.readdir(path);
+    if (!items.length) { box.innerHTML = '<p style="color:var(--s)">Empty folder</p>'; return; }
+    items.sort((a, b) => {
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    box.innerHTML = "";
+    for (const it of items) {
+      const d = document.createElement("div");
+      d.className = "fi";
+      d.textContent = (it.is_dir ? "📁 " : "📄 ") + it.name;
+      if (it.is_dir) d.onclick = () => browse(it.path);
+      box.appendChild(d);
+    }
+  } catch (e) {
+    box.innerHTML = "Error: " + e.message;
+  }
+}
+
+function refreshDir() { if (signedIn) browse(cwd); }
+
+async function newFolder() {
+  if (!signedIn) return toggleAuth();
+  const n = prompt("Folder name:");
+  if (!n) return;
+  try {
+    await puter.fs.mkdir(`${cwd}/${slug(n)}`);
+    browse(cwd);
+    log("Created folder " + n);
+  } catch (e) { alert(e.message); }
+}
+
+function pickUpload() {
+  if (!signedIn) return toggleAuth();
+  document.getElementById("file-up").click();
+}
+
+async function doUpload(e) {
+  const files = e.target.files;
+  if (!files?.length) return;
+  for (const f of files) {
+    try {
+      await puter.fs.write(`${cwd}/${f.name}`, f, { dedupeName: true });
+      log("Uploaded " + f.name);
+    } catch (x) { log("Upload failed " + f.name + ": " + x.message); }
+  }
+  e.target.value = "";
+  browse(cwd);
+  await recordActivity("upload");
+}
+
+async function deployCurrent() {
+  if (!signedIn) return toggleAuth();
+  if (!puter.hosting?.create) { log("Puter hosting API unavailable."); return; }
+  let sub = slug(document.getElementById("deploy-sub").value);
+  if (!sub) sub = slug((user?.username || "grudge") + "-" + cwd.split("/").pop());
+  const dir = cwd;
+  log("Deploying " + dir + " → " + sub + ".puter.site …");
+  try {
+    const sites = await puter.hosting.list().catch(() => []);
+    const exists = Array.isArray(sites) && sites.find(s => (s.subdomain || s.name) === sub);
+    if (!exists) {
+      await puter.hosting.create(sub, dir);
+      log("Live: https://" + sub + ".puter.site");
+    } else {
+      log("Site " + sub + ".puter.site already exists — files in " + dir + " are served (re-upload to update).");
+    }
+    await puter.kv.add("grudge:deploys", { [sub]: { dir, at: Date.now(), user: user.username } });
+    await recordActivity("deploy:" + sub);
+    await listSites();
+  } catch (e) {
+    log("Deploy error: " + e.message);
+  }
+}
+
+async function listSites() {
+  const el = document.getElementById("sites");
+  if (!signedIn || !puter.hosting?.list) { el.innerHTML = ""; return; }
+  try {
+    const sites = await puter.hosting.list();
+    if (!sites?.length) { el.innerHTML = '<p style="color:var(--s);font-size:0.82rem">No hosted sites yet.</p>'; return; }
+    el.innerHTML = "";
+    for (const s of sites) {
+      const sub = s.subdomain || s.name || "site";
+      const url = "https://" + sub + ".puter.site";
+      const row = document.createElement("div");
+      row.className = "site-row";
+      row.innerHTML = `<span>${sub}</span><a href="${url}" target="_blank" rel="noreferrer">${url}</a>`;
+      el.appendChild(row);
+    }
+  } catch (e) {
+    el.innerHTML = '<p style="color:#ff8a8a;font-size:0.82rem">' + e.message + "</p>";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if (!(await waitPuter())) { log("Waiting for Puter SDK…"); return; }
+  await applyTokenFromUrl();
+  if (puter.auth.isSignedIn()) {
+    signedIn = true;
+    await onSignedIn();
+  }
+});
+</script>
+</body>
+</html>
