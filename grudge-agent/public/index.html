@@ -31,6 +31,7 @@
 <script src="/orchestrator-panel.js"></script>
 <script src="/asset-viewer.js"></script>
 <script src="/ollama-client.js"></script>
+<script src="/grudge-ai.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
@@ -559,7 +560,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="status-bar">
       <div id="login-chip" class="login-chip"></div>
       <div class="sdot"><div class="dot" id="d-grok"></div>Grok</div>
-      <div class="sdot"><div class="dot" id="d-ollama"></div>Ollama</div>
+      <div class="sdot" id="sdot-grudge" title="Grudge AI — sign in for cloud models" style="cursor:pointer" onclick="onGrudgeStatusClick()"><div class="dot" id="d-grudge"></div>Grudge</div>
       <div class="sdot"><div class="dot" id="d-node" title="Node runner (local agent)"></div>Node</div>
       <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
       <div class="fleet-strip" id="fleet-strip">Fleet: <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a></div>
@@ -1331,39 +1332,55 @@ async function probeClientOllama() {
 
 async function loadModels() {
   const sel=document.getElementById("model-select");
+  const probe = await GrudgeAI?.probe?.() || {};
   const puterOpts=`<optgroup label="Puter (free chat)">`+
     PUTER_MODELS.map(m=>`<option value="puter:${m}">${m}</option>`).join("")+`</optgroup>`;
-  let grokOpts="", ollamaOpts="";
+  let grudgeOpts="", grokOpts="", ollamaOpts="";
+  if (probe.hubOk || probe.serverHub) {
+    grudgeOpts=`<optgroup label="Grudge AI (best)">`+
+      `<option value="grudge:auto">Grudge Auto</option>`+
+      `<option value="grudge:gemini-3.5-flash">Gemini 3.5 Flash</option>`+
+      `</optgroup>`;
+  }
   const client = await probeClientOllama();
   try {
     const d=await fetch("/api/models").then(r=>r.json());
     const models=d.models||[];
     const allm=models.filter(m=>String(m.name).indexOf("allm:")===0);
     const grok=models.filter(m=>isGrokModel(m.name));
+    const hub=models.filter(m=>GrudgeAI?.isGrudgeModel?.(m.name));
     const serverOllama=models.filter(m=>isOllamaModel(m.name));
     const clientOllama=(client.models||[]).map(n=>({name:n}));
     const ollama=[...new Map([...serverOllama,...clientOllama].map(m=>[m.name,m])).values()];
+    if (hub.length && !grudgeOpts) {
+      grudgeOpts=`<optgroup label="Grudge AI">`+
+        hub.map(m=>`<option value="${m.name}">${m.label||m.name}</option>`).join("")+`</optgroup>`;
+    }
     if (allm.length) grokOpts=`<optgroup label="AnythingLLM (fleet RAG)">`+
       allm.map(m=>`<option value="${m.name}">${m.label||m.name.replace(/^allm:/,"")}</option>`).join("")+`</optgroup>`;
     if (grok.length) grokOpts+=`<optgroup label="Grok (agent tools)">`+
       grok.map(m=>`<option value="${m.name}">${(m.label||m.name).replace(/^grok:/,"")}</option>`).join("")+`</optgroup>`;
-    if (ollama.length) ollamaOpts=`<optgroup label="Local (Ollama)">`+
+    if (ollama.length) ollamaOpts=`<optgroup label="Local fallback (Ollama)">`+
       ollama.map(m=>`<option value="${m.name}">${m.name}${client.ok?"":" (server)"}</option>`).join("")+`</optgroup>`;
     window._hasGrok = !!d.grok;
   } catch(e){ window._hasGrok = false; }
   if (!ollamaOpts && client.models?.length) {
-    ollamaOpts=`<optgroup label="Local (Ollama — your PC)">`+
+    ollamaOpts=`<optgroup label="Local fallback (Ollama)">`+
       client.models.map(m=>`<option value="${m}">${m}</option>`).join("")+`</optgroup>`;
   }
-  sel.innerHTML = grokOpts + ollamaOpts + puterOpts;
+  sel.innerHTML = grudgeOpts + grokOpts + ollamaOpts + puterOpts;
+  const firstGrudge = sel.querySelector('optgroup[label^="Grudge"] option');
   const firstGrok = sel.querySelector('optgroup[label^="Grok"] option');
   const firstLocal = sel.querySelector('optgroup[label^="Local"] option');
-  if (firstLocal && (client.ok || !isCloudHost())) {
-    currentModel = firstLocal.value;
-    if (client.ok) setMode("agent");
+  if (firstGrudge && (probe.serverHub || GrudgeAuth?.user?.grudgeId)) {
+    currentModel = firstGrudge.value;
+    setMode("auto");
   } else if (firstGrok && isCloudHost()) {
     currentModel = firstGrok.value;
     setMode("agent");
+  } else if (firstLocal && (client.ok || !isCloudHost())) {
+    currentModel = firstLocal.value;
+    if (client.ok) setMode("agent");
   } else {
     currentModel = "puter:"+PUTER_MODELS[0];
   }
@@ -1421,17 +1438,28 @@ async function refreshMem() {
   else el.innerHTML=`<span class="mem-empty">gruda.md is empty — ask the agent to start one</span>`;
 }
 
+function onGrudgeStatusClick() {
+  if (GrudgeAI?.isReady?.()) return;
+  if (GrudgeAuth?.user?.grudgeId) { checkHealth(); return; }
+  GrudgeAuth?.signIn?.();
+}
+
 async function checkHealth() {
-  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({ollama:false,treaty:true,grok:false}));
-  const client = await probeClientOllama();
-  const ollamaOn = !!h.ollama || !!client.ok;
+  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({treaty:true,grok:false,grudgeAi:false,serverless:true}));
+  await GrudgeAI?.probe?.();
+  const grudgeOn = !!GrudgeAI?.isReady?.();
   const nodeOn = !h.serverless;
   document.getElementById("d-grok")?.classList.toggle("on", !!h.grok);
-  document.getElementById("d-ollama")?.classList.toggle("on", ollamaOn);
+  const gdot = document.getElementById("d-grudge");
+  gdot?.classList.toggle("on", grudgeOn);
+  const sdot = document.getElementById("sdot-grudge");
+  if (sdot) sdot.title = GrudgeAI?.statusLabel?.() || "Grudge AI";
   document.getElementById("d-treaty")?.classList.toggle("on", !!h.treaty);
   document.getElementById("d-node")?.classList.toggle("on", nodeOn);
   window._nodeRunner = nodeOn;
   window._hasGrok = !!h.grok;
+  window._hasGrudge = grudgeOn;
+  window._clientOllama = !!(await probeClientOllama()).ok;
   const fs = document.getElementById("fleet-strip");
   if (fs && h.grudgeAi) fs.innerHTML = 'Fleet: <span style="color:var(--green)">AI hub ✓</span> · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>';
 }
@@ -2260,6 +2288,7 @@ function setMode(m) {
 function resolveSendMode(text) {
   if (currentMode !== "auto") return currentMode;
   return GrudaAutoMode.pick(text, {
+    hasGrudge: !!window._hasGrudge,
     hasOllama: !!(window._clientOllama && GrudaOllama?.available),
     hasGrok: !!window._hasGrok,
     hasProject: !!activeProj,
@@ -2302,6 +2331,9 @@ async function runChat() {
         bodyEl.innerHTML = mdToHtml(acc);
         scrollBot();
       });
+    } else if (GrudgeAI) {
+      think.remove();
+      full = await GrudgeAI.streamChat({ messages, model: currentModel, bodyEl, render: mdToHtml });
     } else {
       const res=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,model:currentModel})});
       think.remove();
@@ -2593,6 +2625,7 @@ const GrudgeAuth = {
       else userEl.style.display="none";
     }
     try { updateTreatyAccountHint(); } catch(e){}
+    try { checkHealth(); loadModels(); } catch(e){}
     const chip=document.getElementById("login-chip");
     if (chip) {
       chip.innerHTML = inn

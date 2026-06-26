@@ -665,6 +665,23 @@ app.post("/api/chat/stream", async (req, res) => {
     });
   }
 
+  if (grokBuild.isGrokModel(model) || (process.env.VERCEL && grokBuild.hasGrokApi() && !String(model || "").startsWith("puter:"))) {
+    try {
+      const text = await grokBuild.completeChat({
+        model: grokBuild.isGrokModel(model) ? model : "grok:grok-3-mini",
+        messages: allMsgs,
+      });
+      const words = String(text || "").split(/(?<= )/);
+      for (const w of words) {
+        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ type: "done", provider: "grok" })}\n\n`);
+      return res.end();
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`);
+    }
+  }
+
   let r;
   try {
     r = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -672,7 +689,44 @@ app.post("/api/chat/stream", async (req, res) => {
       body: JSON.stringify({ model, messages:allMsgs, stream:true }),
       signal: AbortSignal.timeout(120000),
     });
-  } catch(err) { res.write(`data: ${JSON.stringify({type:"error",message:err.message})}\n\n`); return res.end(); }
+  } catch(err) {
+    try {
+      const fb = await llmRouter.complete({
+        model: model || "grudge:auto",
+        system: sysContent || "",
+        user: [...allMsgs].reverse().find(m => m.role === "user")?.content || "",
+        prefer: process.env.VERCEL ? ["hub", "grok"] : ["hub", "grok", "ollama"],
+      });
+      const words = String(fb.text || "").split(/(?<= )/);
+      for (const w of words) {
+        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ type: "done", provider: fb.backend })}\n\n`);
+      return res.end();
+    } catch (fbErr) {
+      res.write(`data: ${JSON.stringify({type:"error",message:fbErr.message || err.message})}\n\n`);
+      return res.end();
+    }
+  }
+  if (!r.ok) {
+    try {
+      const fb = await llmRouter.complete({
+        model: model || "grudge:auto",
+        system: sysContent || "",
+        user: [...allMsgs].reverse().find(m => m.role === "user")?.content || "",
+        prefer: process.env.VERCEL ? ["hub", "grok"] : ["hub", "grok", "ollama"],
+      });
+      const words = String(fb.text || "").split(/(?<= )/);
+      for (const w of words) {
+        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ type: "done", provider: fb.backend })}\n\n`);
+      return res.end();
+    } catch (fbErr) {
+      res.write(`data: ${JSON.stringify({type:"error",message:`Ollama ${r.status}; ${fbErr.message}`})}\n\n`);
+      return res.end();
+    }
+  }
   for await (const chunk of r.body) {
     for (const line of Buffer.from(chunk).toString().split("\n").filter(Boolean)) {
       try {

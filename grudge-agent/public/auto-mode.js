@@ -12,7 +12,7 @@
     if (!t) return "chat";
     if (AGENT_RE.test(t)) return "agent";
     if (t.length < 60 && !t.includes("?")) return "chat";
-    if (ctx?.hasOllama || ctx?.hasGrok) return "agent";
+    if (ctx?.hasGrudge || ctx?.hasOllama || ctx?.hasGrok) return "agent";
     return "chat";
   }
 
