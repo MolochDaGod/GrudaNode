@@ -630,6 +630,16 @@ app.post("/api/agent/tool", async (req, res) => {
   }
 });
 
+async function streamTextSse(res, text, extra = {}) {
+  const words = (text || "").split(/(?<= )/);
+  for (const w of words) {
+    res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
+    await new Promise((r) => setTimeout(r, 6));
+  }
+  res.write(`data: ${JSON.stringify({ type: "done", ...extra })}\n\n`);
+  res.end();
+}
+
 /* ── Chat stream (no tools) ──────────────────────────────────── */
 app.post("/api/chat/stream", async (req, res) => {
   const { messages, model, system } = req.body;
@@ -665,20 +675,24 @@ app.post("/api/chat/stream", async (req, res) => {
     });
   }
 
-  if (grokBuild.isGrokModel(model) || (process.env.VERCEL && grokBuild.hasGrokApi() && !String(model || "").startsWith("puter:"))) {
+  const useGrok = grokBuild.isGrokModel(model) ||
+    (process.env.VERCEL && grokBuild.hasGrokApi() && !String(model || "").startsWith("puter:"));
+  if (useGrok && grokBuild.hasGrokApi()) {
     try {
-      const text = await grokBuild.completeChat({
-        model: grokBuild.isGrokModel(model) ? model : "grok:grok-3-mini",
-        messages: allMsgs,
-      });
-      const words = String(text || "").split(/(?<= )/);
-      for (const w of words) {
-        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
-      }
-      res.write(`data: ${JSON.stringify({ type: "done", provider: "grok" })}\n\n`);
-      return res.end();
+      const grokModel = grokBuild.isGrokModel(model) ? model : "grok:grok-3-mini";
+      const text = await grokBuild.completeChat({ messages: allMsgs, model: grokModel });
+      return streamTextSse(res, text, { provider: "grok", model: grokModel });
     } catch (err) {
+      if (grudgeAiHub.listHubModels().length) {
+        return grudgeAiHub.streamHubChat(res, {
+          messages: allMsgs,
+          model: "grudge:auto",
+          role: "general",
+          generationConfig: { maxOutputTokens: 2048 },
+        });
+      }
       res.write(`data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`);
+      return res.end();
     }
   }
 
@@ -686,7 +700,7 @@ app.post("/api/chat/stream", async (req, res) => {
   try {
     r = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ model, messages:allMsgs, stream:true }),
+      body: JSON.stringify({ model: model || DEFAULT_MODEL, messages:allMsgs, stream:true }),
       signal: AbortSignal.timeout(120000),
     });
   } catch(err) {
@@ -697,12 +711,7 @@ app.post("/api/chat/stream", async (req, res) => {
         user: [...allMsgs].reverse().find(m => m.role === "user")?.content || "",
         prefer: process.env.VERCEL ? ["hub", "grok"] : ["hub", "grok", "ollama"],
       });
-      const words = String(fb.text || "").split(/(?<= )/);
-      for (const w of words) {
-        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
-      }
-      res.write(`data: ${JSON.stringify({ type: "done", provider: fb.backend })}\n\n`);
-      return res.end();
+      return streamTextSse(res, fb.text, { provider: fb.backend });
     } catch (fbErr) {
       res.write(`data: ${JSON.stringify({type:"error",message:fbErr.message || err.message})}\n\n`);
       return res.end();
@@ -716,12 +725,7 @@ app.post("/api/chat/stream", async (req, res) => {
         user: [...allMsgs].reverse().find(m => m.role === "user")?.content || "",
         prefer: process.env.VERCEL ? ["hub", "grok"] : ["hub", "grok", "ollama"],
       });
-      const words = String(fb.text || "").split(/(?<= )/);
-      for (const w of words) {
-        res.write(`data: ${JSON.stringify({ type: "token", content: w })}\n\n`);
-      }
-      res.write(`data: ${JSON.stringify({ type: "done", provider: fb.backend })}\n\n`);
-      return res.end();
+      return streamTextSse(res, fb.text, { provider: fb.backend });
     } catch (fbErr) {
       res.write(`data: ${JSON.stringify({type:"error",message:`Ollama ${r.status}; ${fbErr.message}`})}\n\n`);
       return res.end();
@@ -737,6 +741,96 @@ app.post("/api/chat/stream", async (req, res) => {
     }
   }
   res.end();
+});
+
+/** Fleet + Legion hub chat (non-streaming) — used by dev-tool, ENGINE, fleet apps */
+app.post("/api/chat", async (req, res) => {
+  const { messages, message, model, role } = req.body || {};
+  const chatMessages = Array.isArray(messages) && messages.length
+    ? messages
+    : (message ? [{ role: "user", content: message }] : []);
+  if (!chatMessages.length) return res.status(400).json({ error: "messages or message required" });
+
+  if (grudgeAiHub.isHubModel(model) || (!model && grudgeAiHub.listHubModels().length)) {
+    try {
+      const data = await grudgeAiHub.hubChat({
+        messages: chatMessages,
+        model: model || "grudge:auto",
+        role: role || "dev",
+      });
+      const text = data.response || data.text || "";
+      return res.json({ response: text, message: text, content: text, source: "legion-hub", model: data.model });
+    } catch (err) {
+      if (model && grudgeAiHub.isHubModel(model)) {
+        return res.status(502).json({ error: err.message });
+      }
+    }
+  }
+
+  try {
+    const sys = chatMessages.find((m) => m.role === "system")?.content || "";
+    const user = chatMessages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+    const result = await llmRouter.complete({
+      model,
+      system: sys,
+      user,
+      prefer: process.env.VERCEL ? ["grok", "hub"] : ["ollama", "grok", "hub"],
+    });
+    return res.json({
+      response: result.text,
+      message: result.text,
+      content: result.text,
+      source: result.backend,
+      model: result.model,
+    });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+});
+
+/** Legion agent roster — proxied from grudge-ai-hub */
+app.get("/api/agents", async (_req, res) => {
+  try {
+    const r = await fetch(`${grudgeAiHub.HUB_URL}/v1/agents`, { signal: AbortSignal.timeout(10000) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status).json(data);
+    return res.json(data);
+  } catch (err) {
+    return res.status(502).json({ error: err.message, agents: [] });
+  }
+});
+
+/** ALE worker bridge — ui.grudge-studio.com and fleet canvas tools */
+app.post("/ai/chat", async (req, res) => {
+  const { messages, system, model, max_tokens } = req.body || {};
+  const chatMessages = Array.isArray(messages) ? messages : [];
+  const sys = system || "";
+  try {
+    if (grudgeAiHub.listHubModels().length) {
+      const data = await grudgeAiHub.hubChat({
+        messages: chatMessages,
+        model: model || "grudge:gemini-3.5-flash",
+        role: "dev",
+        systemInstruction: sys,
+        generationConfig: { maxOutputTokens: max_tokens || 2048 },
+      });
+      const text = data.response || "";
+      return res.json({ content: [{ type: "text", text }], response: text, text });
+    }
+    const result = await llmRouter.complete({
+      model,
+      system: sys,
+      user: chatMessages.filter((m) => m.role === "user").map((m) => m.content).join("\n"),
+      prefer: ["grok", "hub"],
+    });
+    return res.json({
+      content: [{ type: "text", text: result.text }],
+      response: result.text,
+      text: result.text,
+    });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
 });
 
 /* ── Onboarding ──────────────────────────────────────────────── */

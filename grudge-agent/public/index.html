@@ -1348,7 +1348,7 @@ async function loadModels() {
     const models=d.models||[];
     const allm=models.filter(m=>String(m.name).indexOf("allm:")===0);
     const grok=models.filter(m=>isGrokModel(m.name));
-    const hub=models.filter(m=>GrudgeAI?.isGrudgeModel?.(m.name));
+    const hub=models.filter(m=>GrudgeAI?.isGrudgeModel?.(m.name) || String(m.name).indexOf("grudge:")===0 || String(m.name).indexOf("gemini:")===0);
     const serverOllama=models.filter(m=>isOllamaModel(m.name));
     const clientOllama=(client.models||[]).map(n=>({name:n}));
     const ollama=[...new Map([...serverOllama,...clientOllama].map(m=>[m.name,m])).values()];

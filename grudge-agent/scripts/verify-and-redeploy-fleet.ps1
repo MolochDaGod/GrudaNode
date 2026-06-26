@@ -83,8 +83,8 @@ foreach ($proj in $Projects) {
 if (-not $SkipDeploy) {
     Write-Host "`n=== Redeploy production ===" -ForegroundColor Cyan
     $deployDirs = @{
-        grudachain = "C:\Users\nugye\.grok\worktrees\github-grudanode\grudachain"
-        grudaagent = "C:\Users\nugye\.grok\worktrees\github-grudanode\grudgestudio\grudge-agent"
+        grudachain = "D:\repos\grudachain"
+        grudaagent = "C:\Users\david\Desktop\GrudaNode"
     }
     foreach ($proj in $Projects) {
         $dir = $deployDirs[$proj]
