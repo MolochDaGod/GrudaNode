@@ -1,8 +1,9 @@
 "use strict";
 
+const { GRUDGE_OBJECTSTORE_URL } = require("./fleet");
 const FORGE_URL = (process.env.FORGE_URL || "https://forge.grudge-studio.com").replace(/\/$/, "");
 const MINE_LOADER_PATH = process.env.MINE_LOADER_PATH || "F:\\GitHub\\voxgrudge\\Mine-Loader";
-const OBJECTSTORE_URL = (process.env.GRUDGE_ASSET_API || "https://api.grudge-studio.com").replace(/\/$/, "");
+const OBJECTSTORE_URL = GRUDGE_OBJECTSTORE_URL;
 
 const WORKERS = {
   code: {

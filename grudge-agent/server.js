@@ -21,6 +21,14 @@ const fs     = require("fs");
 const os     = require("os");
 const { execSync } = require("child_process");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
+const {
+  FLEET_URLS,
+  GRUDGE_AUTH_URL,
+  GRUDGE_GAME_DATA_URL,
+  GRUDGE_R2_CDN,
+  GRUDGE_OBJECTSTORE_URL,
+  GRUDGE_ASSET_API,
+} = require("./lib/fleet");
 const express   = require("express");
 const WebSocket = require("ws");
 const multer    = require("multer");
@@ -109,12 +117,7 @@ const SPLASH_GIF_2   = process.env.SPLASH_GIF_2  || "";
 const MASTER_NODE    = process.env.MASTER_NODE_URL || "";
 const TREATY_URL     = process.env.TREATY_CHAT_URL || MASTER_NODE || "https://master.grudge-studio.com";
 
-/* ── Grudge R2 / asset CDN ───────────────────────────────────── */
-const GRUDGE_R2_CDN    = (process.env.GRUDGE_R2_CDN    || "https://assets.grudge-studio.com").replace(/\/$/, "");
-const GRUDGE_ASSET_API = (process.env.GRUDGE_ASSET_API || "https://api.grudge-studio.com").replace(/\/$/, "");
-
 /* ── Grudge identity / SSO ──────────────────────────────────── */
-const GRUDGE_AUTH_URL    = (process.env.GRUDGE_AUTH_URL    || "https://id.grudge-studio.com").replace(/\/$/, "");
 const GRUDGE_ACCOUNT_URL = (process.env.GRUDGE_ACCOUNT_URL || "").replace(/\/$/, "");
 
 /* ── Music (Mureka) ──────────────────────────────────────────── */
@@ -1458,23 +1461,26 @@ app.get("/api/assets/grudge", async (_req, res) => {
   ]});
 });
 
-/* ── Grudge R2 assets (asset-api registry + R2 CDN) ──────────── */
-// Lists real Grudge assets from the asset-api Worker and normalizes them to the
-// card shape the Assets tab already renders. URLs resolve to the R2 CDN.
+/* ── Grudge R2 assets (ObjectStore registry + R2 CDN) ─────────── */
+// Lists Grudge assets from ObjectStore /api/assets/search and normalizes them to
+// the card shape the Assets tab renders. URLs resolve to the R2 CDN.
 app.get("/api/assets/r2", async (req, res) => {
   const { q = "", category = "", limit = "60" } = req.query;
   const params = new URLSearchParams();
-  if (q) params.set("q", q);
-  if (category && category !== "all") params.set("category", category);
+  const query = String(q || "").trim();
+  const cat = String(category || "").trim();
+  if (query) params.set("q", query);
+  if (cat && cat !== "all") params.set("category", cat);
+  if (!query && (!cat || cat === "all")) params.set("category", "character");
   params.set("limit", String(Math.min(parseInt(limit, 10) || 60, 120)));
   try {
-    const r = await fetch(`${GRUDGE_ASSET_API}/assets?${params}`, { signal: AbortSignal.timeout(12000) });
+    const r = await fetch(`${GRUDGE_ASSET_API}/api/assets/search?${params}`, { signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d = await r.json();
-      const rows = d.assets || d.results || d.rows || (Array.isArray(d) ? d : []);
+      const rows = d.results || d.assets || d.rows || (Array.isArray(d) ? d : []);
       const cdn = (k) => (k ? `${GRUDGE_R2_CDN}/${String(k).replace(/^\//, "")}` : "");
       const assets = rows.map((a) => {
-        const key = a.r2_key || a.r2Key || a.key || a.path || "";
+        const key = a.r2_key || a.r2Key || a.key || a.path || a.filename || "";
         return {
           name: a.name || (key.split("/").pop() || "asset"),
           type: a.type || a.category || "model",
@@ -1485,11 +1491,11 @@ app.get("/api/assets/r2", async (req, res) => {
           r2Key: key,
         };
       });
-      return res.json({ assets, total: d.total || assets.length, source: "asset-api" });
+      return res.json({ assets, total: d.count || d.total || assets.length, source: "objectstore" });
     }
   } catch {}
   res.json({ assets: [], total: 0, source: "fallback",
-    note: `Grudge asset-api unreachable. Set GRUDGE_ASSET_API (now ${GRUDGE_ASSET_API}) or check connectivity.` });
+    note: `ObjectStore asset search unreachable. Set GRUDGE_ASSET_API (now ${GRUDGE_ASSET_API}) or check connectivity.` });
 });
 
 // CORS-safe passthrough so the sandboxed Environment iframe can fetch GLB/FBX/

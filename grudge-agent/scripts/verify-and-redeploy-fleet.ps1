@@ -17,7 +17,7 @@ $checks = @(
     @{ Name = "Nexus fleet/mismatch"; Url = "https://grudachain.grudge-studio.com/api/fleet/mismatch" },
     @{ Name = "Nexus RAG status"; Url = "https://grudachain.grudge-studio.com/api/ai/rag/status" },
     @{ Name = "Grudge ID health"; Url = "https://id.grudge-studio.com/api/health" },
-    @{ Name = "Game API health"; Url = "https://api.grudge-studio.com/api/health" },
+    @{ Name = "Game API health"; Url = "https://grudge-api-production-0d46.up.railway.app/api/health" },
     @{ Name = "AI Gateway health"; Url = "https://ai.grudge-studio.com/api/health" },
     @{ Name = "ObjectStore catalog"; Url = "https://objectstore.grudge-studio.com/api/v1/catalog" },
     @{ Name = "grudaAgent health"; Url = "https://grudaagent.vercel.app/api/health" },

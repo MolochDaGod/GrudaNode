@@ -1,5 +1,7 @@
 "use strict";
 
+const { FLEET_URLS } = require("./fleet");
+
 /**
  * Project boilerplates — scaffolded on POST /api/projects { name, template }.
  * Each template returns { id, label, description, files: { relativePath: content } }.
@@ -155,9 +157,10 @@ app.listen(PORT, () => console.log(\`[${name}] http://localhost:\${PORT}\`));
     files: (name) => ({
       "scripts/main.js": `// ${name} — Node script (IDE Run or Environment → Node → Play)
 const FLEET = {
-  grudgeId: "https://id.grudge-studio.com",
-  assets: "https://assets.grudge-studio.com",
-  objectStore: "https://objectstore.grudge-studio.com",
+  grudgeId: "${FLEET_URLS.auth}",
+  assets: "${FLEET_URLS.assets}",
+  objectStore: "${FLEET_URLS.objectStore}",
+  gameData: "${FLEET_URLS.gameData}",
 };
 
 async function main() {
@@ -166,9 +169,9 @@ async function main() {
 
   // Example: fetch public health (no secrets in sandbox)
   try {
-    const r = await fetch("https://api.grudge-studio.com/health");
+    const r = await fetch(FLEET.gameData + "/api/health");
     const j = await r.json();
-    console.log("api.grudge-studio.com health:", j.status || j.ok || "ok");
+    console.log("game-data health:", j.status || j.ok || "ok");
   } catch (e) {
     console.log("fetch skipped:", e.message);
   }
@@ -206,7 +209,7 @@ main().catch((e) => { console.error(e); process.exit(1); });
       const out = document.getElementById("out");
       out.textContent = "…";
       try {
-        const r = await fetch("https://api.grudge-studio.com/health");
+        const r = await fetch("${FLEET_URLS.gameData}/api/health");
         out.textContent = await r.text();
       } catch (e) { out.textContent = e.message; }
     };
