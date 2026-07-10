@@ -113,6 +113,19 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  function hubKey() {
+    try {
+      return (
+        localStorage.getItem("grudge_ai_key") ||
+        localStorage.getItem("LEGION_HUB_API_KEY") ||
+        sessionStorage.getItem("grudge_ai_key") ||
+        ""
+      );
+    } catch {
+      return "";
+    }
+  }
+
   async function sendChat() {
     const input = el("legion-chat-input");
     const role = el("legion-role-select")?.value || "general";
@@ -121,18 +134,44 @@
     if (input) input.value = "";
     appendChat("you", text, "legion-user");
 
-    // Prefer server hub key path when available; else tell user to sign in / use API key
+    const key = hubKey();
+    const placeholder = document.createElement("div");
+    placeholder.className = "legion-msg legion-agent";
+    placeholder.innerHTML = `<div class="legion-msg-role">${esc(role)}</div><div class="legion-msg-body">…</div>`;
+    el("legion-chat-log")?.appendChild(placeholder);
+    const bodyEl = placeholder.querySelector(".legion-msg-body");
+
+    // 1) Direct hub chat when user stored a fleet API key (BYOK path)
+    if (key) {
+      try {
+        const res = await fetch(`${hubBase()}/v1/agents/${encodeURIComponent(role)}/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: text }],
+            model: "google/gemini-3.5-flash",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Hub ${res.status}`);
+        if (bodyEl) bodyEl.textContent = data.response || data.message || JSON.stringify(data);
+        return;
+      } catch (e) {
+        if (bodyEl) bodyEl.textContent = "";
+        appendChat("error", "Hub key chat failed: " + e.message + " — falling back to server stream…", "legion-err");
+      }
+    }
+
+    // 2) Agent server stream (GRUDGE_AI_KEY / Puter)
     try {
-      const body = {
-        messages: [{ role: "user", content: text }],
-        model: "grudge:auto",
-      };
-      // Route via agent server stream (uses GRUDGE_AI_KEY) when possible
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...body,
+          messages: [{ role: "user", content: text }],
           model: "grudge:gemini-3.5-flash",
           system: `You are the Grudge Legion agent role: ${role}. Stay in character for that specialty.`,
         }),
@@ -145,11 +184,6 @@
       const rdr = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
-      const placeholder = document.createElement("div");
-      placeholder.className = "legion-msg legion-agent";
-      placeholder.innerHTML = `<div class="legion-msg-role">${esc(role)}</div><div class="legion-msg-body"></div>`;
-      el("legion-chat-log")?.appendChild(placeholder);
-      const bodyEl = placeholder.querySelector(".legion-msg-body");
       while (true) {
         const { value, done } = await rdr.read();
         if (done) break;
@@ -170,9 +204,18 @@
           }
         }
       }
-      if (!full && bodyEl) bodyEl.textContent = "(empty response — check server GRUDGE_AI_KEY / sign-in)";
+      if (!full && bodyEl) {
+        bodyEl.textContent =
+          "(empty — set localStorage grudge_ai_key to your Legion API key, or GRUDGE_AI_KEY on the agent server / Puter sign-in)";
+      }
     } catch (e) {
-      appendChat("error", e.message + " — set GRUDGE_AI_KEY on the agent server or use Puter sign-in for cloud models.", "legion-err");
+      if (bodyEl) bodyEl.textContent = "";
+      appendChat(
+        "error",
+        e.message +
+          " — store key: localStorage.setItem('grudge_ai_key','…') or configure server GRUDGE_AI_KEY.",
+        "legion-err",
+      );
     }
   }
 
