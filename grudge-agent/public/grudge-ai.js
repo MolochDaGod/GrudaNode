@@ -3,7 +3,14 @@
  * Hub (server key) → Puter (signed-in) → local Ollama → server /api/chat/stream
  */
 (function (global) {
-  const HUB = "https://ai.grudge-studio.com";
+  function hubOrigin() {
+    const h = typeof location !== "undefined" ? location.hostname : "";
+    if (h === "ai.grudge-studio.com" || h === "legion-ai.grudge-studio.com") {
+      return location.origin;
+    }
+    return "https://ai.grudge-studio.com";
+  }
+  const HUB = typeof location !== "undefined" ? hubOrigin() : "https://ai.grudge-studio.com";
   const PUTER_MODELS = ["gemini-2.0-flash", "gpt-4o-mini", "claude-3-5-sonnet", "deepseek-chat"];
 
   function isGrudgeModel(m) {
@@ -83,7 +90,8 @@
 
     async probe() {
       try {
-        const h = await fetch(HUB + "/health").then((r) => r.json());
+        const base = hubOrigin();
+        const h = await fetch(base + "/health").then((r) => r.json());
         this.hubOk = h.status === "ok";
       } catch {
         this.hubOk = false;

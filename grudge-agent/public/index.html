@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GRUDA Agent — Grudge Studio</title>
-<meta name="description" content="GRUDA Agent — agentic AI workspace by Grudge Studio (local Ollama or free Puter cloud) with music, voice, IDE, and a worker orchestrator.">
+<title>GRUDA Legion — AI Hub · Grudge Studio</title>
+<meta name="description" content="Canonical Grudge Studio AI hub — Legion agents, ObjectStore assets, open-source VS Code (Monaco), terminal, and npm toolchain for fleet games.">
 <meta name="theme-color" content="#ff6b00">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,8 +17,8 @@
 <link rel="shortcut icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/gruda-king.png">
 <meta property="og:type" content="website">
-<meta property="og:title" content="GRUDA Agent — Grudge Studio">
-<meta property="og:description" content="Your personal agentic AI workspace. Local AI · No Cloud · No Keys.">
+<meta property="og:title" content="GRUDA Legion — ai.grudge-studio.com">
+<meta property="og:description" content="Legion AI, assets CDN, VS Code OSS, terminal, and Grudge Studio npm recipes.">
 <meta property="og:image" content="/gruda-king.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="/gruda-king.png">
@@ -32,6 +32,8 @@
 <script src="/asset-viewer.js"></script>
 <script src="/ollama-client.js"></script>
 <script src="/grudge-ai.js"></script>
+<script src="/legion-panel.js"></script>
+<script src="/studio-npm.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
@@ -422,6 +424,54 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .login-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:.72rem;cursor:pointer;transition:all .15s;}
 .login-btn:hover{border-color:var(--accent);color:var(--accent);}
 .login-btn .gruda-ico{height:14px;width:14px;}
+
+/* ── LEGION + STUDIO NPM ── */
+#panel-legion,#panel-studio{overflow-y:auto;padding:0;}
+.legion-hero,.studio-hero{padding:16px 18px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#1a0a00 0%,#0e0e18 55%,#0a1220 100%);}
+.legion-hero h2,.studio-hero h2{font-size:1.05rem;font-weight:800;color:var(--accent);margin-bottom:4px;}
+.legion-hero p,.studio-hero p{font-size:.78rem;color:var(--muted);line-height:1.5;max-width:720px;}
+.legion-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--sidebar);}
+.legion-body{display:grid;grid-template-columns:minmax(280px,1fr) minmax(300px,1.1fr);gap:0;min-height:0;flex:1;}
+@media(max-width:900px){.legion-body{grid-template-columns:1fr;}}
+.legion-col{display:flex;flex-direction:column;min-height:320px;border-right:1px solid var(--border);}
+.legion-col:last-child{border-right:none;}
+.legion-col-hdr{padding:8px 12px;font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:700;}
+#legion-agents-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:12px;overflow-y:auto;flex:1;align-content:start;}
+.legion-agent-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;}
+.legion-agent-card:hover{border-color:var(--accent);}
+.legion-agent-role{font-size:.62rem;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;font-weight:700;}
+.legion-agent-name{font-size:.82rem;font-weight:700;}
+.legion-agent-desc{font-size:.68rem;color:var(--muted);line-height:1.4;flex:1;}
+.legion-agent-meta{font-size:.62rem;color:var(--blue);margin-bottom:4px;word-break:break-all;}
+#legion-chat-log{flex:1;overflow-y:auto;padding:10px 12px;background:#0a0a12;font-size:.78rem;}
+.legion-msg{margin-bottom:10px;}
+.legion-msg-role{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:2px;}
+.legion-msg-body{line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.legion-user .legion-msg-role{color:var(--accent);}
+.legion-agent .legion-msg-role{color:var(--gold);}
+.legion-err .legion-msg-body{color:var(--red);}
+.legion-sys{font-size:.72rem;color:var(--muted);font-style:italic;margin-bottom:8px;}
+.legion-chat-row{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);background:var(--sidebar);}
+#legion-chat-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:.82rem;outline:none;font-family:inherit;}
+#legion-chat-input:focus{border-color:var(--accent);}
+#legion-role-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:.76rem;outline:none;max-width:140px;}
+.studio-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 16px;max-width:1100px;}
+@media(max-width:800px){.studio-grid{grid-template-columns:1fr;}}
+.studio-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;}
+.studio-section h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:10px;font-weight:700;}
+#studio-npm-recipes{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;}
+.studio-recipe-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.studio-recipe-title{font-size:.85rem;font-weight:700;margin-bottom:3px;}
+.studio-recipe-desc{font-size:.72rem;color:var(--muted);margin-bottom:6px;line-height:1.4;}
+.studio-recipe-cmds{background:#000;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:Consolas,monospace;font-size:.7rem;color:#c8e6c9;overflow-x:auto;white-space:pre;margin-bottom:8px;line-height:1.45;}
+.studio-recipe-actions{display:flex;gap:6px;flex-wrap:wrap;}
+#studio-vscode-links{display:flex;flex-direction:column;gap:6px;}
+.studio-link-card{display:block;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);text-decoration:none;color:var(--text);transition:border-color .15s;}
+.studio-link-card:hover{border-color:var(--accent);}
+.studio-link-name{font-size:.8rem;font-weight:700;color:var(--accent);}
+.studio-link-note{font-size:.68rem;color:var(--muted);margin-top:2px;}
+#studio-package-json{background:#000;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:Consolas,monospace;font-size:.68rem;color:#9cdcfe;max-height:280px;overflow:auto;white-space:pre;}
+#studio-fleet-endpoints{display:flex;flex-wrap:wrap;gap:4px;}
 </style>
 </head>
 <body>
@@ -429,8 +479,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <!-- SPLASH -->
 <div id="splash">
   <div id="splash-gifs" class="splash-gifs"></div>
-  <div class="splash-title">GRUDA AGENT</div>
-  <div class="splash-sub">Grudge Studio · Local AI Workspace · No Cloud · No Keys</div>
+  <div class="splash-title">GRUDA LEGION</div>
+  <div class="splash-sub">ai.grudge-studio.com · Agents · Assets · VS Code OSS · Terminal · npm</div>
   <div id="splash-hist-wrap" class="splash-hist" style="display:none">
     <h3>Recent Sessions</h3>
     <div class="hcards" id="hcards"></div>
@@ -547,10 +597,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="sb-label">Navigate</div>
     <div class="sb-nav">
       <button class="nav-btn active" id="nav-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</button>
-      <button class="nav-btn" id="nav-treaty" onclick="showTab('treaty')">💬 Treaty</button>
-      <button class="nav-btn" id="nav-ide" onclick="showTab('ide')">🖥️ IDE</button>
-      <button class="nav-btn" id="nav-env" onclick="showTab('env')">🎮 Environment</button>
+      <button class="nav-btn" id="nav-legion" onclick="showTab('legion')">⚔ Legion</button>
       <button class="nav-btn" id="nav-assets" onclick="showTab('assets')">🎨 Assets</button>
+      <button class="nav-btn" id="nav-ide" onclick="showTab('ide')">⌨ VS Code</button>
+      <button class="nav-btn" id="nav-studio" onclick="showTab('studio')">📦 Studio npm</button>
+      <button class="nav-btn" id="nav-env" onclick="showTab('env')">🎮 Environment</button>
+      <button class="nav-btn" id="nav-treaty" onclick="showTab('treaty')">💬 Treaty</button>
       <button class="nav-btn" id="nav-orch" onclick="showTab('orch')">🎛️ Orchestrator</button>
       <button class="nav-btn" id="nav-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</button>
     </div>
@@ -563,7 +615,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <div class="sdot" id="sdot-grudge" title="Grudge AI — sign in for cloud models" style="cursor:pointer" onclick="onGrudgeStatusClick()"><div class="dot" id="d-grudge"></div>Grudge</div>
       <div class="sdot"><div class="dot" id="d-node" title="Node runner (local agent)"></div>Node</div>
       <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
-      <div class="fleet-strip" id="fleet-strip">Fleet: <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a></div>
+      <div class="fleet-strip" id="fleet-strip">Fleet: <a href="https://ai.grudge-studio.com" target="_blank" rel="noreferrer">AI</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://objectstore.grudge-studio.com" target="_blank" rel="noreferrer">ObjectStore</a> · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://coder.grudge-studio.com" target="_blank" rel="noreferrer">Coder</a></div>
     </div>
   </div>
 
@@ -571,10 +623,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div id="main">
     <div id="tabs">
       <div class="tab active" id="tab-ai" onclick="showTab('ai')"><img src="/gruda-king.png" alt="" class="gruda-ico"> AI Workspace</div>
-      <div class="tab" id="tab-treaty" onclick="showTab('treaty')">💬 Treaty <span id="treaty-badge" class="treaty-badge" style="margin-left:4px">●</span></div>
-      <div class="tab" id="tab-ide" onclick="showTab('ide')">🖥️ IDE</div>
-      <div class="tab" id="tab-env" onclick="showTab('env')">🎮 Environment</div>
+      <div class="tab" id="tab-legion" onclick="showTab('legion')">⚔ Legion</div>
       <div class="tab" id="tab-assets" onclick="showTab('assets')">🎨 Assets</div>
+      <div class="tab" id="tab-ide" onclick="showTab('ide')">⌨ VS Code</div>
+      <div class="tab" id="tab-studio" onclick="showTab('studio')">📦 Studio npm</div>
+      <div class="tab" id="tab-env" onclick="showTab('env')">🎮 Environment</div>
+      <div class="tab" id="tab-treaty" onclick="showTab('treaty')">💬 Treaty <span id="treaty-badge" class="treaty-badge" style="margin-left:4px">●</span></div>
       <div class="tab" id="tab-orch" onclick="showTab('orch')">🎛️ Orchestrator</div>
       <div class="tab" id="tab-cloud" onclick="showTab('cloud')">☁️ Cloud & Deploy</div>
     </div>
@@ -583,7 +637,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="tab-panel active" id="panel-ai">
       <div id="chat-area">
         <div id="msgs">
-          <div id="welcome"><div class="wi"><img src="/gruda-king.png" alt="GRUDA Agent" class="brand-logo"></div><h2>GRUDA Agent is ready</h2><p>Grok Build–aligned workspace: <strong style="color:var(--accent)">Agent mode</strong> runs tools (files, web, shell, memory).<br>Use <code>/design</code> <code>/implement</code> or <code>grudge-studio</code> for skills.<br><strong style="color:var(--blue)">Chat mode</strong> streams via Puter — fast and conversational.</p></div>
+          <div id="welcome"><div class="wi"><img src="/gruda-king.png" alt="GRUDA Legion" class="brand-logo"></div><h2>GRUDA Legion is ready</h2><p>Canonical hub at <strong style="color:var(--accent)">ai.grudge-studio.com</strong> — Legion agents, ObjectStore assets, open-source VS Code (Monaco), terminal, and Studio npm recipes.<br><strong style="color:var(--gold)">Agent mode</strong> runs tools · <strong style="color:var(--blue)">Chat</strong> via Puter · open <strong>⚔ Legion</strong> for role specialists.</p></div>
         </div>
       </div>
       <div id="input-area">
@@ -618,7 +672,70 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       </div>
     </div>
 
-    <!-- IDE Tab -->
+    <!-- Legion Tab -->
+    <div class="tab-panel" id="panel-legion" style="flex-direction:column;">
+      <div class="legion-hero">
+        <h2>⚔ Gruda Legion</h2>
+        <p>Role-specialized agents on the canonical AI gateway. Public catalog at <code>/v1/agents</code> · chat requires server key or Puter sign-in.</p>
+      </div>
+      <div class="legion-toolbar">
+        <span class="int-badge" id="legion-health-badge">…</span>
+        <span id="legion-health-detail" style="font-size:.72rem;color:var(--muted);flex:1"></span>
+        <button type="button" class="env-btn" id="legion-refresh">↻ Refresh</button>
+        <a class="env-btn" href="https://ai.grudge-studio.com/health" target="_blank" rel="noreferrer">Health JSON</a>
+        <a class="env-btn" href="https://ai.grudge-studio.com/v1/agents" target="_blank" rel="noreferrer">/v1/agents</a>
+      </div>
+      <div class="legion-body">
+        <div class="legion-col">
+          <div class="legion-col-hdr">Agents</div>
+          <div id="legion-agents-grid"><div class="asset-loading">Open tab to load…</div></div>
+        </div>
+        <div class="legion-col">
+          <div class="legion-col-hdr">Agent chat</div>
+          <div id="legion-chat-log"><div class="legion-sys">Pick an agent, then send a message.</div></div>
+          <div class="legion-chat-row">
+            <select id="legion-role-select"><option value="general">general</option></select>
+            <input id="legion-chat-input" placeholder="Ask the Legion…">
+            <button type="button" class="send-btn" id="legion-chat-send" style="margin:0">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Studio npm Tab -->
+    <div class="tab-panel" id="panel-studio" style="flex-direction:column;overflow-y:auto;">
+      <div class="studio-hero">
+        <h2>📦 Grudge Studio toolchain</h2>
+        <p>Open-source VS Code stack (Monaco / OpenVSCode), integrated terminal, and npm dependency recipes for fleet games and the local agent.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+          <button type="button" class="env-btn primary" id="studio-open-ide">Open VS Code tab</button>
+          <button type="button" class="env-btn" id="studio-open-assets">Browse assets</button>
+          <button type="button" class="env-btn" id="studio-open-legion">Legion agents</button>
+          <button type="button" class="env-btn" id="studio-copy-pkg">Copy package.json</button>
+        </div>
+      </div>
+      <div class="studio-grid">
+        <div class="studio-section" style="grid-column:1/-1">
+          <h3>Fleet endpoints</h3>
+          <div id="studio-fleet-endpoints"></div>
+        </div>
+        <div class="studio-section">
+          <h3>VS Code · open source</h3>
+          <div id="studio-vscode-links"></div>
+          <p style="font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.45">The <strong>VS Code</strong> tab embeds <strong>Monaco Editor</strong> (the same editor engine as VS Code) plus a allow-listed terminal for <code>npm</code>, <code>node</code>, <code>git</code>, and <code>ollama</code> on local agent hosts.</p>
+        </div>
+        <div class="studio-section">
+          <h3>Starter package.json</h3>
+          <pre id="studio-package-json"></pre>
+        </div>
+        <div class="studio-section" style="grid-column:1/-1">
+          <h3>npm / clone recipes</h3>
+          <div id="studio-npm-recipes"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IDE Tab (Monaco = VS Code OSS editor) -->
     <div class="tab-panel" id="panel-ide">
       <div id="ide-wrap">
         <!-- File Tree -->
@@ -633,7 +750,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <div id="ide-center">
           <div id="ide-tabs">
             <div class="ide-tab active" id="ide-welcome-tab" style="color:var(--muted);font-size:.74rem;padding:6px 14px;cursor:default">
-              ← Open a file from the tree
+              Monaco (VS Code OSS) · open a file · Terminal below
             </div>
           </div>
           <div id="monaco-container"></div>
@@ -653,9 +770,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
               <div id="ide-output"><span class="out-sys">// Output appears here after Run</span></div>
             </div>
             <div id="ide-panel-terminal" style="display:none;flex-direction:column;flex:1;overflow:hidden">
-              <div id="terminal-output"><div class="term-line term-meta">GRUDA terminal — npm, node, git, ollama (allow-listed)</div></div>
+              <div id="terminal-output"><div class="term-line term-meta">Grudge Studio terminal — npm · node · git · ollama (allow-listed). Studio npm tab has recipes.</div></div>
               <div id="terminal-cwd">(project root)</div>
-              <div id="terminal-input-row"><input id="terminal-input" placeholder="npm install · node script.js · git status · ollama list" autocomplete="off"></div>
+              <div id="terminal-input-row"><input id="terminal-input" placeholder="npm install three@0.160.0 · node script.js · git status" autocomplete="off"></div>
             </div>
           </div>
         </div>
@@ -699,9 +816,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <!-- Assets Tab -->
     <div class="tab-panel" id="panel-assets" style="flex-direction:column;">
       <div class="asset-toolbar">
-        <button class="asset-source-btn active" id="asrc-polyhaven" onclick="setAssetSource('polyhaven')">Poly Haven</button>
+        <button class="asset-source-btn active" id="asrc-grudge" onclick="setAssetSource('grudge')">Grudge CDN / ObjectStore</button>
+        <button class="asset-source-btn" id="asrc-polyhaven" onclick="setAssetSource('polyhaven')">Poly Haven</button>
         <button class="asset-source-btn" id="asrc-polypizza" onclick="setAssetSource('polypizza')">Poly Pizza</button>
-        <button class="asset-source-btn" id="asrc-grudge" onclick="setAssetSource('grudge')">Grudge Studio</button>
+        <a class="env-btn" href="https://objectstore.grudge-studio.com" target="_blank" rel="noreferrer" title="ObjectStore browser">ObjectStore ↗</a>
+        <a class="env-btn" href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer" title="Assets CDN">CDN ↗</a>
+        <a class="env-btn" href="https://browse.grudge-studio.com/GRUDGE_Item_Database" target="_blank" rel="noreferrer">Item DB ↗</a>
         <select id="asset-type" onchange="loadAssets()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:.75rem;outline:none;">
           <option value="all">All types</option>
           <option value="model">3D Models</option>
@@ -1581,7 +1701,7 @@ function initWS() {
 
 /* ── TABS ── */
 function showTab(tab) {
-  ["ai","treaty","ide","env","assets","orch","cloud"].forEach(t=>{
+  ["ai","legion","studio","treaty","ide","env","assets","orch","cloud"].forEach(t=>{
     document.getElementById("panel-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("tab-"+t)?.classList.toggle("active",t===tab);
     document.getElementById("nav-"+t)?.classList.toggle("active",t===tab);
@@ -1589,9 +1709,11 @@ function showTab(tab) {
   if(tab==="orch")   { try { GrudaOrchestrator.init(); } catch(e){} }
   if(tab==="cloud")  { loadIntegrations(); refreshCloudStorageUI(); }
   if(tab==="treaty") { updateTreatyAccountHint(); initTreaty(); }
-  if(tab==="ide")    { initMonaco(); refreshTree(); }
+  if(tab==="ide")    { initMonaco(); refreshTree(); try{ GrudaTerminal.bind(); }catch(e){} }
   if(tab==="assets") loadAssets();
   if(tab==="env")    initEnv();
+  if(tab==="legion") { try { GrudaLegion.init(); } catch(e){} }
+  if(tab==="studio") { try { GrudaStudioNpm.init(); } catch(e){} }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1758,7 +1880,7 @@ async function generateSnippet(){
 /* ══════════════════════════════════════════════════════════
    ASSET BROWSER — Poly Haven · Poly Pizza · Grudge Studio
 ══════════════════════════════════════════════════════════ */
-let _assetSource='polyhaven', _searchTimer=null, _ppKey='', _previewAsset=null, _selectedTemplate='three-scene';
+let _assetSource='grudge', _searchTimer=null, _ppKey='', _previewAsset=null, _selectedTemplate='three-scene';
 
 function setAssetSource(src){
   _assetSource=src;
