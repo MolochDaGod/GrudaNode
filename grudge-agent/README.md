@@ -6,26 +6,30 @@
 
 > Build software, make music, generate voiceovers, automate workflows, and run a whole **team of AI workers** — with a persistent, memory-aware agent that knows your projects and follows your rules.
 
-**New in v1.1.0:** free Puter cloud models · 🎵 Mureka music · 🗣️ ElevenLabs voice · 🤝 AI worker orchestrator with a shared “truth” store · upload/unzip/convert tools · user rules + vocal commands · ask-when-unsure agent behavior · expanded Postgres persistence.
+**New in v1.4:** Grok Build agent context (`/api/agent/context`) · fleet asset recognition rules · fixed Grok/Grudge status lights via **grudaagent** + AI hub health merge · `skills/grok-build`.
 
-**▶ Live:** [grudaagent.vercel.app](https://grudaagent.vercel.app) (Vercel) · [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app) (Railway — full stack + Postgres)
+**▶ Live (canonical):** [https://ai.grudge-studio.com](https://ai.grudge-studio.com) (CF Worker proxies this UI)  
+**Vercel project:** [grudaagent.vercel.app](https://grudaagent.vercel.app) · **Railway:** [grudanode-production.up.railway.app](https://grudanode-production.up.railway.app)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/MolochDaGod/GrudaNode)
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MolochDaGod/GrudaNode)
 
 ---
 
-## Deployment status
+## Deployment status (v1.4)
 
 | Target | Status |
 |---|---|
-| **GitHub Release** | ✅ `v1.1.0` published (source + `npx`) |
-| **Local** | ✅ `npx gruda-agent`, Docker, or Docker Compose (with bundled Ollama) |
-| **Cloud chat** | ✅ Free **Puter** models in-browser — no server-side AI keys required |
-| **Railway** | ✅ **Live** — https://grudanode-production.up.railway.app (full stack; Postgres connected) |
-| **Vercel** | ✅ **Live** — https://grudaagent.vercel.app (UI + serverless API; chat via free Puter models) |
+| **Fleet AI hub** | ✅ https://ai.grudge-studio.com — Grok + Grudge status wired |
+| **Vercel `grudaagent`** | ✅ Production secrets: `XAI_API_KEY`, `GRUDGE_AI_KEY`, hub URL |
+| **Grok Build context** | ✅ `GET /api/agent/context` — fleet map, assets, skills |
+| **Local** | ✅ `npx gruda-agent`, Docker, Compose |
+| **Puter cloud models** | ✅ Free in-browser when signed in |
+| **Railway** | ✅ Full stack + optional Postgres |
 
-> `MUREKA_API_KEY` / `ELEVENLABS_API_KEY` enable music/voice, and `DATABASE_URL` enables durable Postgres storage. All are optional — features degrade gracefully when unset.
+> **Do not** use `grudge-agent.vercel.app` as production UI — no secrets. AI hub `UI_ORIGIN` must be **`https://grudaagent.vercel.app`**.
+
+> Optional: `MUREKA_API_KEY` / `ELEVENLABS_API_KEY` / `DATABASE_URL`.
 
 ---
 

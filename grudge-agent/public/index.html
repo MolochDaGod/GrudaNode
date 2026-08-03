@@ -613,7 +613,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <div id="login-chip" class="login-chip"></div>
       <div class="sdot"><div class="dot" id="d-grok"></div>Grok</div>
       <div class="sdot" id="sdot-grudge" title="Grudge AI — sign in for cloud models" style="cursor:pointer" onclick="onGrudgeStatusClick()"><div class="dot" id="d-grudge"></div>Grudge</div>
-      <div class="sdot"><div class="dot" id="d-node" title="Node runner (local agent)"></div>Node</div>
+      <div class="sdot"><div class="dot" id="d-node" title="Node / API runtime"></div>Node</div>
       <div class="sdot"><div class="dot" id="d-treaty"></div>Treaty</div>
       <div class="fleet-strip" id="fleet-strip">Fleet: <a href="https://ai.grudge-studio.com" target="_blank" rel="noreferrer">AI</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://objectstore.grudge-studio.com" target="_blank" rel="noreferrer">ObjectStore</a> · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://coder.grudge-studio.com" target="_blank" rel="noreferrer">Coder</a></div>
     </div>
@@ -1574,7 +1574,11 @@ async function checkHealth() {
   const hubAlive = !!(h.grudgeAi || h.ok || h.status === "ok" || h.service === "grudge-ai-hub" || h.ui_health?.grudgeAi || GrudgeAI?.hubOk);
   const grudgeChatReady = !!GrudgeAI?.isReady?.();
   const grudgeOn = grudgeChatReady || hubAlive;
-  const nodeOn = h.serverless === false;
+  // Node light = API runtime up (cloud serverless Node OR local persistent process).
+  // nodeRunner = full local agent (terminal/FS) — still false on Vercel for feature gates.
+  const apiUp = !!(h.ok || h.status === "ok" || h.node === true || h.service === "grudge-ai-hub");
+  const nodeRunner = h.nodeRunner === true || h.serverless === false;
+  const nodeOn = apiUp || nodeRunner;
   document.getElementById("d-grok")?.classList.toggle("on", grokOn);
   const gdot = document.getElementById("d-grudge");
   gdot?.classList.toggle("on", grudgeOn);
@@ -1587,8 +1591,19 @@ async function checkHealth() {
         : (GrudgeAI?.statusLabel?.() || "Grudge AI offline");
   }
   document.getElementById("d-treaty")?.classList.toggle("on", h.treaty !== false);
-  document.getElementById("d-node")?.classList.toggle("on", nodeOn);
-  window._nodeRunner = nodeOn;
+  const ndot = document.getElementById("d-node");
+  ndot?.classList.toggle("on", nodeOn);
+  const nsdot = ndot?.parentElement;
+  if (nsdot) {
+    nsdot.title = h.nodeLabel
+      || (nodeRunner
+        ? "Local Node runner online (terminal + host FS)"
+        : apiUp
+          ? "Cloud API online (serverless Node) — use npx gruda-agent for local runner"
+          : "Node / API offline");
+  }
+  window._nodeRunner = nodeRunner; // feature gate for local-only tools
+  window._nodeApi = apiUp;
   window._hasGrok = grokOn;
   window._hasGrudge = grudgeOn;
   window._clientOllama = !!(await probeClientOllama()).ok;

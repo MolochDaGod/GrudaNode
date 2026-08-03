@@ -1252,11 +1252,12 @@ app.get("/api/health", async (_req, res) => {
     const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal: AbortSignal.timeout(4000) });
     ollama = r.ok;
   } catch {}
+  const isServerless = !!process.env.VERCEL;
   res.json({
     ok: true,
     ollama,
     ollamaHost,
-    ollamaNote: process.env.VERCEL
+    ollamaNote: isServerless
       ? "Server cannot reach your PC — browser probes 127.0.0.1:11434 when you run Ollama locally"
       : null,
     treaty: true,
@@ -1264,7 +1265,15 @@ app.get("/api/health", async (_req, res) => {
     grok: grokBuild.hasGrokApi(),
     grudgeAi: grudgeAiHub.listHubModels().length > 0,
     skills: _bundledSkills.length,
-    serverless: !!process.env.VERCEL,
+    serverless: isServerless,
+    // Status bar "Node": green when this API process is serving (cloud serverless = still Node)
+    node: true,
+    // Local-only full runner (terminal / ide:run on host FS) — false on Vercel
+    nodeRunner: !isServerless,
+    nodeMode: isServerless ? "serverless" : "persistent",
+    nodeLabel: isServerless
+      ? "Cloud API online (serverless Node)"
+      : "Local Node runner online",
     storage: describeStoragePaths(),
     pwa: true,
     orchestrator: true,
