@@ -110,16 +110,22 @@
       };
     },
 
-    /** Green when hub is up and user is signed in (Puter) or server has hub key */
+    /** True when user can chat via hub key, login, or at least hub is up for fleet tools */
     isReady() {
-      return this.hubOk && (this.serverHub || loggedIn());
+      if (!this.hubOk) return false;
+      return !!(this.serverHub || loggedIn());
+    },
+
+    /** Hub /health ok — status bar may show hub-up even before sign-in */
+    hubReachable() {
+      return !!this.hubOk;
     },
 
     statusLabel() {
-      if (this.isReady()) return "Grudge AI online";
+      if (this.hubOk && (this.serverHub || loggedIn())) return "Grudge AI online";
+      if (this.hubOk) return "Grudge AI hub up — sign in for cloud chat";
       if (!loggedIn()) return "Sign in for Grudge AI";
-      if (!this.hubOk) return "Grudge hub unreachable";
-      return "Grudge AI — server key pending";
+      return "Grudge hub unreachable";
     },
 
     async streamChat({ messages, model, bodyEl, render }) {

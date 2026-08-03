@@ -1,7 +1,7 @@
 {
   "name": "gruda-agent",
-  "version": "1.3.0",
-  "description": "GRUDA Legion hub UI — agents, ObjectStore assets, Monaco/VS Code OSS, terminal, Grudge Studio npm recipes (Grok/Ollama/Puter)",
+  "version": "1.4.0",
+  "description": "GRUDA Legion hub UI — Grok Build agent context, ObjectStore assets, Monaco, terminal, fleet AI (Grok/Ollama/Puter)",
   "main": "server.js",
   "bin": {
     "gruda-agent": "./bin/gruda-agent.js"

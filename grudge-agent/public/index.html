@@ -1565,23 +1565,42 @@ function onGrudgeStatusClick() {
 }
 
 async function checkHealth() {
-  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({treaty:true,grok:false,grudgeAi:false,serverless:true}));
+  // Accept both GRUDA Agent health shape and CF worker fleet health (merged)
+  const h=await fetch("/api/health").then(r=>r.json()).catch(()=>({treaty:true,grok:false,grudgeAi:false,serverless:true,ok:false}));
   await GrudgeAI?.probe?.();
-  const grudgeOn = !!GrudgeAI?.isReady?.();
-  const nodeOn = !h.serverless;
-  document.getElementById("d-grok")?.classList.toggle("on", !!h.grok);
+  // Grok: server XAI key, or worker-merged flag, or provider stamp
+  const grokOn = !!(h.grok || h.ui_health?.grok || h.providers?.xai_grok === "configured" || h.llm?.grok);
+  // Grudge: hub /health ok (fleet), server key, or signed-in chat path
+  const hubAlive = !!(h.grudgeAi || h.ok || h.status === "ok" || h.service === "grudge-ai-hub" || h.ui_health?.grudgeAi || GrudgeAI?.hubOk);
+  const grudgeChatReady = !!GrudgeAI?.isReady?.();
+  const grudgeOn = grudgeChatReady || hubAlive;
+  const nodeOn = h.serverless === false;
+  document.getElementById("d-grok")?.classList.toggle("on", grokOn);
   const gdot = document.getElementById("d-grudge");
   gdot?.classList.toggle("on", grudgeOn);
   const sdot = document.getElementById("sdot-grudge");
-  if (sdot) sdot.title = GrudgeAI?.statusLabel?.() || "Grudge AI";
-  document.getElementById("d-treaty")?.classList.toggle("on", !!h.treaty);
+  if (sdot) {
+    sdot.title = grudgeChatReady
+      ? (GrudgeAI?.statusLabel?.() || "Grudge AI online")
+      : hubAlive
+        ? "Grudge AI hub up — sign in for personal cloud chat"
+        : (GrudgeAI?.statusLabel?.() || "Grudge AI offline");
+  }
+  document.getElementById("d-treaty")?.classList.toggle("on", h.treaty !== false);
   document.getElementById("d-node")?.classList.toggle("on", nodeOn);
   window._nodeRunner = nodeOn;
-  window._hasGrok = !!h.grok;
+  window._hasGrok = grokOn;
   window._hasGrudge = grudgeOn;
   window._clientOllama = !!(await probeClientOllama()).ok;
   const fs = document.getElementById("fleet-strip");
-  if (fs && h.grudgeAi) fs.innerHTML = 'Fleet: <span style="color:var(--green)">AI hub ✓</span> · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a> · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a> · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>';
+  if (fs && (h.grudgeAi || hubAlive)) {
+    const g = grokOn ? ' · <span style="color:var(--green)">Grok ✓</span>' : ' · <span style="color:var(--muted)">Grok</span>';
+    fs.innerHTML = 'Fleet: <span style="color:var(--green)">AI hub ✓</span>' + g +
+      ' · <a href="https://id.grudge-studio.com" target="_blank" rel="noreferrer">ID</a>' +
+      ' · <a href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer">CDN</a>' +
+      ' · <a href="https://info.grudge-studio.com/docs" target="_blank" rel="noreferrer">Docs</a>' +
+      ' · <a href="https://grudachain.grudge-studio.com" target="_blank" rel="noreferrer">Nexus</a>';
+  }
 }
 
 /* ── TREATY CHAT (light account rooms) ── */

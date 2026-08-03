@@ -1273,7 +1273,17 @@ app.get("/api/health", async (_req, res) => {
     db: pgReady,
     music: !!MUREKA_KEY,
     voice: !!ELEVEN_KEY,
+    uiOrigin: "https://grudaagent.vercel.app",
+    hub: grudgeAiHub.HUB_URL,
   });
+});
+
+/* ── Grok Build agent context (fleet + assets + skills) ─────── */
+app.get("/api/agent/context", (_req, res) => {
+  res.json(grokBuild.buildAgentContext(_bundledSkills));
+});
+app.get("/api/grok-build", (_req, res) => {
+  res.json(grokBuild.buildAgentContext(_bundledSkills));
 });
 
 app.get("/api/app/paths", (_req, res) => {
