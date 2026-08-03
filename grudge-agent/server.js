@@ -1549,28 +1549,51 @@ app.get(/^\/api\/r2\/(.*)/, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════
    ENVIRONMENT — agentic Three.js / Rapier / Phaser / Node studio
    Scene generation (LLM) + per-project save/load of scene code.
+   Skill-backed prompts: threejs-production, grudge-rapier, world-scale, assets.
    ═══════════════════════════════════════════════════════════════ */
+const envSkillsPrompt = require("./lib/env-skills-prompt");
+
 function stripFences(s) {
   return String(s || "").replace(/^\s*```[a-z]*\n?/i, "").replace(/```\s*$/i, "").trim();
 }
 function envSystemPrompt(engine) {
-  const base = "You are the GRUDA Environment Worker. Return ONLY runnable code with NO markdown fences and NO prose. " +
-    "Load Grudge assets via the global assetUrl('/models/...') helper (it resolves to the R2 CDN). " +
-    "Always clean up: stop the loop and dispose geometries/materials/renderer on teardown.";
-  if (engine === "rapier") return base + " Target: an ES module using bare imports 'three', 'three/addons/...', and '@dimforge/rapier3d-compat'. await RAPIER.init() before using physics; step the world at a fixed timestep inside the animation loop; sync mesh transforms from rigid bodies.";
-  if (engine === "phaser") return base + " Target: an ES module using a bare import of 'phaser'. Create a Phaser.Game with a Scene (preload/create/update). Keep the canvas sized to the window.";
-  if (engine === "node")  return base + " Target: a self-contained Node.js script (CommonJS or ESM) that logs output to stdout. No browser/DOM APIs.";
-  return base + " Target: an ES module using bare imports 'three' and 'three/addons/...'. Set up renderer, scene, a PerspectiveCamera and OrbitControls, lights, and a requestAnimationFrame loop. Handle window resize.";
+  return envSkillsPrompt.envSystemPrompt(engine);
 }
+
+/** Public: clients (incl. Puter in-browser) must use the same skill prompt */
+app.get("/api/env/system-prompt", (req, res) => {
+  const engine = String(req.query.engine || "three");
+  res.json({
+    ok: true,
+    engine,
+    system: envSystemPrompt(engine),
+    skills: [
+      "threejs-skills",
+      "threejs-production-best-practices",
+      "grudge-rapier",
+      "grudge-world-scale",
+      "grudge-warlords-assets",
+    ],
+  });
+});
 
 app.post("/api/env/scene", async (req, res) => {
   const { prompt, engine = "three", model } = req.body;
   if (!prompt) return res.status(400).json({ error: "prompt required" });
+  const system = envSystemPrompt(engine);
+  const user = envSkillsPrompt.envUserPrompt(prompt, engine);
   try {
-    const code = await llmComplete(model || DEFAULT_MODEL, envSystemPrompt(engine), prompt, 90000);
-    res.json({ ok: true, engine, code: stripFences(code) });
+    const code = await llmComplete(model || DEFAULT_MODEL, system, user, 120000);
+    res.json({
+      ok: true,
+      engine,
+      code: stripFences(code),
+      skills: ["threejs-production-best-practices", "grudge-rapier", "grudge-world-scale", "grudge-warlords-assets"],
+    });
   } catch (e) {
-    res.status(500).json({ error: `Scene generation failed (${e.message}). Run Ollama/set OLLAMA_HOST, or pick a Puter cloud model (generated in-browser).` });
+    res.status(500).json({
+      error: `Scene generation failed (${e.message}). Pick Grok/Grudge model, run Ollama, or use a Puter cloud model.`,
+    });
   }
 });
 

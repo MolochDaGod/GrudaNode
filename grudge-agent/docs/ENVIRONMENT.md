@@ -77,10 +77,23 @@ registerPlugin({
 });
 ```
 ## Scene generation (AI)
-**🤖 Generate** sends your prompt + an engine-aware system prompt to the selected model:
-- **Local Ollama** model → `POST /api/env/scene` (server calls Ollama).
-- **Puter (free cloud)** model → generated in-browser via `puter.ai.chat` (no server key).
-The system prompt enforces these rules (module output, `assetUrl()`, cleanup, `GRUDA.boot`/`registerPlugin`). The orchestrator's `art3d` worker can also produce scenes that paste straight into the editor.
+**🤖 Generate** sends your prompt + a **fleet skill-backed** system prompt to the selected model:
+
+| Path | When |
+|------|------|
+| `POST /api/env/scene` | Grok / Grudge / Ollama models (server) |
+| Puter `puter.ai.chat` | Puter cloud models — still loads system from `GET /api/env/system-prompt` |
+
+### Skills embedded in the system prompt (`lib/env-skills-prompt.js`)
+- **threejs-production-best-practices** — renderer, SI, no hot-loop alloc, dispose  
+- **grudge-rapier** — init WASM, fixed step, density, fixed trimesh, no Cannon  
+- **grudge-world-scale** — 1 unit = 1 m, human ≈ 1.8 m  
+- **grudge-warlords-assets** — `assetUrl()` → CDN only  
+
+Also: `GET /api/env/system-prompt?engine=three|rapier|phaser|node`  
+Skill doc: `skills/env-threejs-rapier/SKILL.md`
+
+Output must be a **complete Play-able ESM module** (not a snippet): `GRUDA.boot`, lights, floor/grid, resize.
 ## Save / load
 Scenes persist per project at `<project>/.gruda/scenes/<id>.json` via `GET/POST /api/env/scenes(/:id)` and reload from the toolbar dropdown. A dedicated `grudge-scenes` R2 bucket is planned but not required today.
 ## Vendored UI kit (reachable)

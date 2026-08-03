@@ -2219,12 +2219,33 @@ main().catch((e) => { console.error(e); process.exit(1); });
 `
 };
 
-function ENV_SYS(engine){
-  const base="You are the GRUDA Environment Worker. Return ONLY runnable code with NO markdown fences and NO prose. Load Grudge assets via the global assetUrl('/models/...') helper (resolves to the R2 CDN). Always clean up on teardown.";
-  if(engine==='rapier') return base+" ES module using bare imports 'three', 'three/addons/...', '@dimforge/rapier3d-compat'. await RAPIER.init(); step the world each frame; sync meshes from rigid bodies. You may use the global GRUDA.boot(ctx, onFrame) helper and registerPlugin().";
-  if(engine==='phaser') return base+" ES module using a bare import of 'phaser'. Create a Phaser.Game with a Scene (create/update), canvas sized to the window.";
-  if(engine==='node')   return base+" A self-contained Node.js script that logs to stdout. No DOM APIs.";
-  return base+" ES module using bare imports 'three' and 'three/addons/...'. Set up renderer, scene, PerspectiveCamera, OrbitControls, lights and use the global GRUDA.boot(ctx, onFrame) loop + registerPlugin(). Handle resize.";
+/** Fallback if /api/env/system-prompt fails — still skill-aware (not one-liners). */
+function ENV_SYS_FALLBACK(engine){
+  const base=`You are the GRUDA Environment Worker + Grudge 3D skills agent.
+Return ONLY runnable code — NO markdown fences, NO prose.
+Skills: threejs-production-best-practices, grudge-rapier, grudge-world-scale, grudge-warlords-assets.
+SI units (1u=1m, human ~1.8m). Assets via global assetUrl('/models/...') only — never invent CDNs.
+Use GRUDA.boot(ctx,onFrame) + registerPlugin(). Dispose-safe. Complete Play-able scene.`;
+  if(engine==='rapier') return base+`
+ES module: import three, OrbitControls, RAPIER from '@dimforge/rapier3d-compat'.
+await RAPIER.init() first. World gravity y=-9.81. world.step() once per frame.
+Fixed ground collider; dynamic density>0; sync mesh from rb.translation/rotation.
+ctx={THREE,RAPIER,world,scene,camera,renderer,assetUrl,clock}. NO Cannon-ES APIs.`;
+  if(engine==='phaser') return base+` ES module import Phaser; Game + Scene create/update; RESIZE scale.`;
+  if(engine==='node') return base+` Node script only (no DOM). May fetch fleet /api/health. Log to stdout.`;
+  return base+`
+ES module: three + OrbitControls. One renderer, pixelRatio cap, hemi+dir lights, floor/grid.
+registerPlugin for motion. ctx={THREE,scene,camera,renderer,assetUrl,clock}. resize handler.`;
+}
+let _envSysCache={};
+async function ENV_SYS(engine){
+  const e=engine||'three';
+  if(_envSysCache[e]) return _envSysCache[e];
+  try{
+    const d=await fetch('/api/env/system-prompt?engine='+encodeURIComponent(e)).then(r=>r.json());
+    if(d.system){ _envSysCache[e]=d.system; return d.system; }
+  }catch(_){}
+  return ENV_SYS_FALLBACK(e);
 }
 function envStrip(s){ return String(s||'').replace(/^\s*```[a-z]*\n?/i,'').replace(/```\s*$/i,'').trim(); }
 function envStatus(t){ const el=document.getElementById('env-status'); if(el) el.textContent=t||''; }
@@ -2372,20 +2393,29 @@ function envFullscreen(){
 }
 
 async function envGenerate(){
-  const p=window.prompt('Describe the '+envEngine+' scene to generate:');
+  const p=window.prompt('Describe the '+envEngine+' scene to generate (fleet SI scale · assets via assetUrl · full Play-able module):');
   if(!p) return;
-  envStatus('Generating…');
+  envStatus('Generating with three.js / rapier fleet skills…');
   try{
     let code='';
-    if(isPuterModel(currentModel) && typeof puter!=='undefined' && puter.ai){
-      const resp=await puter.ai.chat([{role:'system',content:ENV_SYS(envEngine)},{role:'user',content:p}],{ model: currentModel.slice(6) });
+    const system=await ENV_SYS(envEngine);
+    const user=`Engine: ${envEngine}\nUser request: ${p}\n\nDeliver a COMPLETE Play-able module following Grudge threejs + rapier skills (SI meters, assetUrl CDN, GRUDA.boot).`;
+    // Prefer server path for Grok/Grudge/Ollama (skill prompt + longer timeout)
+    const usePuter=isPuterModel(currentModel) && typeof puter!=='undefined' && puter.ai;
+    if(usePuter && !isGrokModel(currentModel) && !(typeof isGrudgeModel==='function' && isGrudgeModel(currentModel)) && !(currentModel||'').startsWith('grudge:')){
+      const resp=await puter.ai.chat([{role:'system',content:system},{role:'user',content:user}],{ model: currentModel.slice(6) });
       code=envStrip((resp&&(resp.message&&resp.message.content||resp.text))||String(resp||''));
     } else {
       const d=await fetch('/api/env/scene',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:p, engine:envEngine, model:currentModel})}).then(r=>r.json());
       if(d.error){ envStatus(d.error); return; }
       code=d.code||'';
+      if(d.skills) envStatus('Generated ✓ skills: '+d.skills.join(', ')+' — press Play');
     }
-    if(code && envEditor){ envEditor.setValue(code); envStatus('Generated ✓ — press Play'); }
+    if(code && envEditor){
+      envEditor.setValue(code);
+      const st=document.getElementById('env-status');
+      if(!st || !/skills:/.test(st.textContent||'')) envStatus('Generated ✓ (skill-backed) — press Play');
+    }
     else envStatus('No code returned');
   }catch(e){ envStatus('Generate failed: '+e.message); }
 }
