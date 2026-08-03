@@ -290,27 +290,40 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .out-err{color:#ff6b6b;}
 .out-sys{color:var(--muted);}
 
-/* ── ASSETS TAB ── */
-.asset-toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0;background:var(--sidebar);}
+/* ── ASSETS TAB (in-app browser) ── */
+.asset-toolbar{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex-shrink:0;background:var(--sidebar);}
 .asset-source-btn{padding:4px 12px;border-radius:16px;border:1px solid var(--border);background:none;color:var(--muted);font-size:.74rem;cursor:pointer;transition:all .15s;}
 .asset-source-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(255,107,0,.08);}
-#asset-search{flex:1;max-width:260px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:.8rem;outline:none;}
+#asset-search{flex:1;min-width:140px;max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:.8rem;outline:none;}
 #asset-search:focus{border-color:var(--accent);}
-#asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:14px;overflow-y:auto;flex:1;align-content:start;}
+.asset-toolbar select{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:.75rem;outline:none;max-width:160px;}
+#assets-body{display:flex;flex:1;overflow:hidden;min-height:0;}
+#asset-nav{width:200px;min-width:160px;border-right:1px solid var(--border);overflow-y:auto;background:var(--sidebar);flex-shrink:0;padding:8px 0;}
+.asset-nav-title{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:6px 12px 4px;font-weight:700;}
+.asset-nav-item{display:flex;justify-content:space-between;gap:6px;padding:6px 12px;font-size:.72rem;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;}
+.asset-nav-item:hover{color:var(--text);background:rgba(255,255,255,.04);}
+.asset-nav-item.active{color:var(--accent);background:rgba(255,107,0,.08);}
+.asset-nav-item .cnt{color:var(--muted);font-size:.64rem;}
+#assets-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.asset-breadcrumb{padding:6px 12px;font-size:.7rem;color:var(--muted);border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.asset-breadcrumb button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.7rem;padding:0 2px;}
+.asset-breadcrumb span{color:var(--muted);}
+#asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px;padding:12px;overflow-y:auto;flex:1;align-content:start;}
 .asset-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .2s;}
 .asset-card:hover{border-color:var(--accent);}
 .asset-card img{width:100%;aspect-ratio:1;object-fit:cover;background:var(--surface2);display:block;}
-.asset-card .ac-name{font-size:.72rem;padding:5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;}
-.asset-card .ac-meta{font-size:.64rem;color:var(--muted);padding:0 7px 5px;}
+.asset-card-ph{width:100%;aspect-ratio:1;background:linear-gradient(145deg,var(--surface2),#1a1a28);display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:var(--muted);}
 .asset-card-info{padding:6px 7px 8px;}
 .asset-card-name{font-size:.72rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;}
 .asset-card-type{font-size:.62rem;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
 .asset-dl-btn{display:inline-block;padding:3px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer;text-decoration:none;transition:opacity .15s;}
 .asset-dl-btn:hover{opacity:.85;}
 .asset-loading{grid-column:1/-1;text-align:center;color:var(--muted);font-size:.8rem;padding:40px 0;}
+.asset-pager{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;justify-content:center;font-size:.72rem;color:var(--muted);flex-shrink:0;}
+.asset-pager button{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:.72rem;}
+.asset-pager button:disabled{opacity:.4;cursor:default;}
 #assets-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
-#asset-grid{flex:1;min-width:0;}
-#asset-preview{width:min(42%,420px);min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--sidebar);}
+#asset-preview{width:min(40%,400px);min-width:260px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--sidebar);}
 .asset-preview-hdr{padding:8px 12px;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;justify-content:space-between;}
 .asset-preview-body{flex:1;position:relative;min-height:200px;overflow:hidden;}
 .asset-preview-body .viewer-canvas,.asset-preview-body .viewer-image{width:100%;height:100%;object-fit:contain;display:block;}
@@ -318,6 +331,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .asset-preview-actions{padding:8px 10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;}
 .asset-preview-meta{font-size:.68rem;color:var(--muted);padding:0 10px 8px;word-break:break-all;line-height:1.4;}
 .asset-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px rgba(255,107,0,.25);}
+@media(max-width:900px){
+  #asset-nav{width:120px;min-width:100px;}
+  #asset-preview{min-width:200px;width:38%;}
+}
 .viewer-modal{position:fixed;inset:0;z-index:1100;display:none;align-items:center;justify-content:center;}
 .viewer-modal.open{display:flex;}
 .viewer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.82);}
@@ -813,35 +830,57 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       </div>
     </div>
 
-    <!-- Assets Tab -->
+    <!-- Assets Tab — fully in-app (no external page hop) -->
     <div class="tab-panel" id="panel-assets" style="flex-direction:column;">
       <div class="asset-toolbar">
-        <button class="asset-source-btn active" id="asrc-grudge" onclick="setAssetSource('grudge')">Grudge CDN / ObjectStore</button>
+        <button class="asset-source-btn active" id="asrc-grudge" onclick="setAssetSource('grudge')">Grudge Fleet</button>
         <button class="asset-source-btn" id="asrc-polyhaven" onclick="setAssetSource('polyhaven')">Poly Haven</button>
         <button class="asset-source-btn" id="asrc-polypizza" onclick="setAssetSource('polypizza')">Poly Pizza</button>
-        <a class="env-btn" href="https://objectstore.grudge-studio.com" target="_blank" rel="noreferrer" title="ObjectStore browser">ObjectStore ↗</a>
-        <a class="env-btn" href="https://assets.grudge-studio.com" target="_blank" rel="noreferrer" title="Assets CDN">CDN ↗</a>
-        <a class="env-btn" href="https://browse.grudge-studio.com/GRUDGE_Item_Database" target="_blank" rel="noreferrer">Item DB ↗</a>
-        <select id="asset-type" onchange="loadAssets()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:.75rem;outline:none;">
-          <option value="all">All types</option>
+        <select id="asset-type" onchange="assetResetPage();loadAssets()" title="Kind filter">
+          <option value="all">All kinds</option>
           <option value="model">3D Models</option>
-          <option value="texture">Textures</option>
+          <option value="texture">Textures / Icons</option>
           <option value="hdri">HDRIs</option>
+          <option value="items">Items catalog</option>
         </select>
-        <input id="asset-search" placeholder="Search assets…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter')loadAssets()">
-        <button class="env-btn" onclick="GrudaViewer.open({modal:true,...(_previewAsset||{})})" id="asset-fullscreen-btn" style="display:none" title="Fullscreen preview">⤢</button>
+        <select id="asset-source-filter" onchange="assetResetPage();loadAssets()" title="Catalog source" style="display:none">
+          <option value="">All catalogs</option>
+          <option value="master-items">Master items</option>
+          <option value="asset-registry">Sprite registry</option>
+          <option value="grudge6">grudge6 races</option>
+        </select>
+        <input id="asset-search" placeholder="Search name, path, category…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter'){assetResetPage();loadAssets()}">
+        <button class="env-btn" type="button" onclick="assetResetPage();loadAssets()" title="Search">Search</button>
+        <button class="env-btn" type="button" onclick="GrudaViewer.open({modal:true,...(_previewAsset||{})})" id="asset-fullscreen-btn" style="display:none" title="Fullscreen preview">⤢</button>
       </div>
       <div id="assets-wrap">
-        <div id="asset-grid"><div class="asset-loading">Loading assets…</div></div>
+        <div id="assets-body">
+          <nav id="asset-nav" aria-label="Asset categories">
+            <div class="asset-nav-title">Navigate</div>
+            <button type="button" class="asset-nav-item active" data-cat="all" onclick="assetPickCategory('all')">All <span class="cnt" id="asset-nav-all-cnt"></span></button>
+            <div id="asset-nav-list"><div class="asset-loading" style="padding:12px;font-size:.7rem">…</div></div>
+          </nav>
+          <div id="assets-main">
+            <div class="asset-breadcrumb" id="asset-breadcrumb"><button type="button" onclick="assetPickCategory('all')">Fleet</button><span>›</span><span id="asset-crumb-cat">All</span></div>
+            <div id="asset-grid"><div class="asset-loading">Loading fleet catalog…</div></div>
+            <div class="asset-pager" id="asset-pager" style="display:none">
+              <button type="button" id="asset-prev" onclick="assetPage(-1)">‹ Prev</button>
+              <span id="asset-page-label">—</span>
+              <button type="button" id="asset-next" onclick="assetPage(1)">Next ›</button>
+            </div>
+          </div>
+        </div>
         <div id="asset-preview">
-          <div class="asset-preview-hdr"><span>Preview</span><span id="asset-preview-type"></span></div>
+          <div class="asset-preview-hdr"><span>In-app preview</span><span id="asset-preview-type"></span></div>
           <div class="asset-preview-body" id="asset-preview-body">
-            <div class="viewer-placeholder">Click an asset to preview — 3D models and images open here</div>
+            <div class="viewer-placeholder">Select an asset — models & images preview here (no new tab)</div>
           </div>
           <div class="asset-preview-actions" id="asset-preview-actions" style="display:none">
-            <button class="asset-dl-btn" onclick="previewOpenEnv()">▶ Environment</button>
-            <button class="asset-dl-btn" style="background:var(--surface2);color:var(--text)" onclick="previewOpenModal()">⤢ Expand</button>
-            <button class="asset-dl-btn" style="background:var(--surface2);color:var(--text)" onclick="previewCopyUrl()">Copy URL</button>
+            <button class="asset-dl-btn" type="button" onclick="previewOpenEnv()">▶ Environment</button>
+            <button class="asset-dl-btn" type="button" style="background:var(--surface2);color:var(--text)" onclick="previewOpenModal()">⤢ Expand</button>
+            <button class="asset-dl-btn" type="button" style="background:var(--surface2);color:var(--text)" onclick="previewCopyUrl()">Copy URL</button>
+            <button class="asset-dl-btn" type="button" style="background:var(--surface2);color:var(--text)" onclick="previewDownloadInApp()">⬇ Download</button>
+            <button class="asset-dl-btn" type="button" style="background:var(--surface2);color:var(--text)" onclick="previewInsertPath()">Copy path</button>
           </div>
           <div class="asset-preview-meta" id="asset-preview-meta"></div>
         </div>
@@ -1912,33 +1951,89 @@ async function generateSnippet(){
 }
 
 /* ══════════════════════════════════════════════════════════
-   ASSET BROWSER — Poly Haven · Poly Pizza · Grudge Studio
+   ASSET BROWSER — fully in-app (fleet catalog · Poly Haven · Poly Pizza)
 ══════════════════════════════════════════════════════════ */
 let _assetSource='grudge', _searchTimer=null, _ppKey='', _previewAsset=null, _selectedTemplate='three-scene';
+let _assetOffset=0, _assetLimit=48, _assetTotal=0, _assetCategory='all', _assetCats=[];
+
+function assetResetPage(){ _assetOffset=0; }
 
 function setAssetSource(src){
   _assetSource=src;
+  assetResetPage();
   ['polyhaven','polypizza','grudge'].forEach(s=>{
     document.getElementById('asrc-'+s)?.classList.toggle('active',s===src);
   });
   const typeSelect=document.getElementById('asset-type');
+  const srcFilter=document.getElementById('asset-source-filter');
+  const nav=document.getElementById('asset-nav');
   if(typeSelect) typeSelect.style.display=(src==='polyhaven'||src==='grudge')?'':'none';
+  if(srcFilter) srcFilter.style.display=src==='grudge'?'':'none';
+  if(nav) nav.style.display=src==='grudge'?'':'none';
   loadAssets();
 }
 
 function debounceSearch(){
   clearTimeout(_searchTimer);
-  _searchTimer=setTimeout(loadAssets,400);
+  _searchTimer=setTimeout(()=>{ assetResetPage(); loadAssets(); },350);
+}
+
+function assetPickCategory(cat){
+  _assetCategory=cat||'all';
+  assetResetPage();
+  document.querySelectorAll('.asset-nav-item').forEach(el=>{
+    el.classList.toggle('active', (el.getAttribute('data-cat')||'')===_assetCategory);
+  });
+  const crumb=document.getElementById('asset-crumb-cat');
+  if(crumb) crumb.textContent=_assetCategory==='all'?'All':_assetCategory;
+  loadAssets();
+}
+
+function assetPage(dir){
+  const next=_assetOffset + dir*_assetLimit;
+  if(next<0 || next>=_assetTotal) return;
+  _assetOffset=next;
+  loadAssets();
+}
+
+function renderAssetNav(categories, total){
+  const list=document.getElementById('asset-nav-list');
+  const allCnt=document.getElementById('asset-nav-all-cnt');
+  if(allCnt) allCnt.textContent=total?String(total):'';
+  if(!list) return;
+  const top=(categories||[]).slice(0,60);
+  list.innerHTML=top.map(c=>{
+    const id=esc(c.id);
+    const active=_assetCategory===c.id?' active':'';
+    return `<button type="button" class="asset-nav-item${active}" data-cat="${id}" onclick="assetPickCategory('${id.replace(/'/g,"\\'")}')"><span>${id}</span><span class="cnt">${c.count||0}</span></button>`;
+  }).join('')||'<div class="asset-loading" style="padding:8px">No categories</div>';
+}
+
+function updateAssetPager(){
+  const pager=document.getElementById('asset-pager');
+  const label=document.getElementById('asset-page-label');
+  if(!pager) return;
+  if(_assetSource!=='grudge' || _assetTotal<=_assetLimit){ pager.style.display='none'; return; }
+  pager.style.display='flex';
+  const page=Math.floor(_assetOffset/_assetLimit)+1;
+  const pages=Math.max(1, Math.ceil(_assetTotal/_assetLimit));
+  if(label) label.textContent=`${page} / ${pages} · ${_assetTotal} assets`;
+  const prev=document.getElementById('asset-prev');
+  const next=document.getElementById('asset-next');
+  if(prev) prev.disabled=_assetOffset<=0;
+  if(next) next.disabled=_assetOffset+_assetLimit>=_assetTotal;
 }
 
 async function loadAssets(){
   const grid=document.getElementById('asset-grid');
+  if(!grid) return;
   grid.innerHTML='<div class="asset-loading">Loading…</div>';
 
   const q=(document.getElementById('asset-search')?.value||'').trim();
   const type=document.getElementById('asset-type')?.value||'all';
 
   if(_assetSource==='polyhaven'){
+    document.getElementById('asset-nav')&&(document.getElementById('asset-nav').style.display='none');
     const params=new URLSearchParams();
     if(q) params.set('q',q);
     if(type&&type!=='all') params.set('type',type);
@@ -1946,32 +2041,47 @@ async function loadAssets(){
     const data=await res.json();
     if(data.error){ grid.innerHTML='<div class="asset-loading">'+data.error+'</div>'; return; }
     renderAssets(grid, data.assets||[], renderPolyHavenCard);
+    document.getElementById('asset-pager').style.display='none';
 
   } else if(_assetSource==='polypizza'){
+    document.getElementById('asset-nav')&&(document.getElementById('asset-nav').style.display='none');
     const res=await fetch('/api/assets/polypizza?q='+encodeURIComponent(q)+'&key='+encodeURIComponent(_ppKey));
     const data=await res.json();
     if(data.keyRequired){
       grid.innerHTML=`<div style="padding:20px;text-align:center;">
-        <p style="color:var(--muted);margin-bottom:10px;">Poly Pizza requires a free API key.</p>
-        <input id="pp-key-input" placeholder="Paste your key from polypizza.xyz"
-          style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);width:280px;font-size:.8rem;outline:none;">
-        <button onclick="savePPKey()" style="margin-left:8px;padding:6px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:.8rem">Save</button>
-        <p style="margin-top:8px;font-size:.72rem;color:var(--muted)">Get a free key at
-          <a href="https://polypizza.xyz" target="_blank" style="color:var(--accent)">polypizza.xyz</a></p>
+        <p style="color:var(--muted);margin-bottom:10px;">Poly Pizza requires a free API key (stored only in this browser).</p>
+        <input id="pp-key-input" placeholder="Paste key from polypizza.xyz"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);width:min(280px,90%);font-size:.8rem;outline:none;">
+        <button type="button" onclick="savePPKey()" style="margin-left:8px;padding:6px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:.8rem">Save</button>
       </div>`;
       return;
     }
     if(data.error){ grid.innerHTML='<div class="asset-loading">'+data.error+'</div>'; return; }
     renderAssets(grid, data.assets||[], renderPolyPizzaCard);
+    document.getElementById('asset-pager').style.display='none';
 
   } else {
+    document.getElementById('asset-nav')&&(document.getElementById('asset-nav').style.display='');
     const params=new URLSearchParams();
     if(q) params.set('q',q);
-    if(type&&type!=='all') params.set('category',type);
+    // category nav takes precedence over kind when not "all"
+    const cat=_assetCategory && _assetCategory!=='all' ? _assetCategory : (type!=='all'?type:'');
+    if(cat) params.set('category', cat);
+    const srcFilter=document.getElementById('asset-source-filter')?.value||'';
+    if(srcFilter) params.set('source', srcFilter);
+    params.set('limit', String(_assetLimit));
+    params.set('offset', String(_assetOffset));
     const res=await fetch('/api/assets/r2?'+params);
     const data=await res.json();
-    if(!(data.assets&&data.assets.length)&&data.note){ grid.innerHTML='<div class="asset-loading">'+data.note+'</div>'; return; }
+    if(data.categories){ _assetCats=data.categories; renderAssetNav(data.categories, data.total); }
+    _assetTotal=data.total||0;
+    if(!(data.assets&&data.assets.length)){
+      grid.innerHTML='<div class="asset-loading">'+(data.note||'No assets match — try another category or clear search')+'</div>';
+      updateAssetPager();
+      return;
+    }
     renderAssets(grid, data.assets||[], renderGrudgeCard);
+    updateAssetPager();
   }
 }
 
@@ -2011,14 +2121,11 @@ function renderPolyPizzaCard(a){
   card.className='asset-card';
   const url=a.download||a.url||'';
   const meta={ name:a.name, url, kind:'model' };
-  card.innerHTML=`<img src="${a.thumbnail||''}" onerror="this.style.display='none'" loading="lazy">
+  card.innerHTML=`${a.thumbnail?`<img src="${a.thumbnail}" onerror="this.outerHTML='<div class=asset-card-ph>📦</div>'" loading="lazy">`:'<div class="asset-card-ph">📦</div>'}
     <div class="asset-card-info">
-      <div class="asset-card-name">${a.name}</div>
+      <div class="asset-card-name">${esc(a.name||'')}</div>
       <div class="asset-card-type">Poly Pizza</div>
-      <button class="asset-dl-btn asset-view-btn" style="background:var(--surface2);color:var(--text)">👁</button>
-      <a href="${url}" target="_blank" onclick="event.stopPropagation()" class="asset-dl-btn">⬇</a>
     </div>`;
-  card.querySelector('.asset-view-btn').onclick=(e)=>{ e.stopPropagation(); previewAsset(meta); };
   card.onclick=()=>previewAsset(meta);
   return card;
 }
@@ -2026,25 +2133,42 @@ function renderPolyPizzaCard(a){
 function renderGrudgeCard(a){
   const card=document.createElement('div');
   card.className='asset-card';
-  const k=(a.r2Key||'').replace(/'/g,"\\'");
-  const kind=(a.type||a.category||'model').toLowerCase();
-  const useEnv=a.r2Key?`<button class="asset-dl-btn" style="margin-left:4px" onclick="event.stopPropagation();envUseAsset('${k}')">▶ Env</button>`:'';
-  card.innerHTML=`<img src="${a.thumbnail||''}" onerror="this.style.display='none'" loading="lazy">
+  const thumb=a.thumbnail||'';
+  const kind=(a.type||'asset');
+  const icon=kind==='model'?'🎲':(kind==='hdri'?'🌐':'🖼');
+  card.innerHTML=`${thumb
+    ? `<img src="${esc(thumb)}" onerror="this.outerHTML='<div class=asset-card-ph>${icon}</div>'" loading="lazy">`
+    : `<div class="asset-card-ph">${icon}</div>`}
     <div class="asset-card-info">
-      <div class="asset-card-name">${a.name}</div>
-      <div class="asset-card-type">${a.type||a.category||'asset'}</div>
-      <button class="asset-dl-btn asset-view-btn" style="background:var(--surface2);color:var(--text)">👁</button>
-      ${a.url?`<a href="${a.url}" target="_blank" onclick="event.stopPropagation()" class="asset-dl-btn">⬇</a>`:''}${useEnv}
+      <div class="asset-card-name" title="${esc(a.name||'')}">${esc(a.name||'')}</div>
+      <div class="asset-card-type">${esc(a.category||a.type||'asset')}${a.tier!=null?' · T'+a.tier:''}</div>
     </div>`;
-  card.querySelector('.asset-view-btn').onclick=(e)=>{ e.stopPropagation(); previewGrudgeAsset(a); };
-  card.onclick=()=>previewGrudgeAsset(a);
+  card.onclick=()=>{
+    document.querySelectorAll('.asset-card.selected').forEach(c=>c.classList.remove('selected'));
+    card.classList.add('selected');
+    previewGrudgeAsset(a);
+  };
   return card;
 }
 
 function previewGrudgeAsset(a){
-  const kind=(a.type||a.category||'model').toLowerCase();
-  const url=a.url|| (a.r2Key ? (location.origin+'/api/r2/'+a.r2Key.replace(/^\//,'')) : '');
-  previewAsset({ name:a.name, url, kind, r2Key:a.r2Key, thumbnail:a.thumbnail });
+  const kind=(a.type||'model').toLowerCase();
+  // Prefer same-origin proxy for 3D/images so preview stays in-app
+  const url = a.previewUrl
+    || (a.r2Key ? (location.origin+'/api/r2/'+String(a.r2Key).replace(/^\//,'')) : '')
+    || a.url
+    || a.thumbnail
+    || '';
+  previewAsset({
+    name:a.name,
+    url,
+    kind: kind==='texture'||kind==='image'||kind==='hdri' ? kind : (/\.(png|jpe?g|webp|gif)$/i.test(url)?'texture':'model'),
+    r2Key:a.r2Key,
+    thumbnail:a.thumbnail,
+    path:a.path||a.r2Key,
+    category:a.category,
+    source:a.source,
+  });
 }
 
 async function previewPolyHaven(slug){
@@ -2064,21 +2188,60 @@ async function previewPolyHaven(slug){
 
 function previewAsset(opts){
   _previewAsset=opts;
-  document.querySelectorAll('.asset-card.selected').forEach(c=>c.classList.remove('selected'));
   const body=document.getElementById('asset-preview-body');
   if(!body) return;
-  body.innerHTML='<div class="viewer-canvas" style="display:none"></div><img class="viewer-image" alt="" style="display:none"><div class="viewer-placeholder" style="display:none"></div>';
-  GrudaViewer.openInline(body, opts);
-  document.getElementById('asset-preview-type').textContent=opts.kind||'';
-  document.getElementById('asset-preview-meta').textContent=opts.url||'';
+  body.innerHTML='<div class="viewer-canvas" style="display:none"></div><img class="viewer-image" alt="" style="display:none"><div class="viewer-placeholder">Loading preview…</div>';
+  try{
+    GrudaViewer.openInline(body, opts);
+  }catch(e){
+    body.innerHTML='<div class="viewer-placeholder">Preview failed: '+esc(e.message||String(e))+'</div>';
+  }
+  document.getElementById('asset-preview-type').textContent=[opts.kind,opts.category,opts.source].filter(Boolean).join(' · ');
+  document.getElementById('asset-preview-meta').textContent=
+    (opts.path||opts.r2Key||'')+(opts.url?'\n'+opts.url:'');
   document.getElementById('asset-preview-actions').style.display='flex';
   document.getElementById('asset-fullscreen-btn').style.display='';
 }
 function previewOpenModal(){ if(_previewAsset) GrudaViewer.open({ ..._previewAsset, modal:true }); }
-function previewOpenEnv(){ if(_previewAsset?.r2Key) envUseAsset(_previewAsset.r2Key); }
+function previewOpenEnv(){
+  if(!_previewAsset) return;
+  const key=_previewAsset.r2Key||_previewAsset.path;
+  if(key && typeof envUseAsset==='function'){ envUseAsset(key); showTab('env'); }
+  else if(_previewAsset.url){
+    // Insert assetUrl() snippet into Environment editor
+    const code=`// asset from Assets tab\n// ${_previewAsset.name||''}\nconst asset = assetUrl(${JSON.stringify(_previewAsset.r2Key?('/'+_previewAsset.r2Key):_previewAsset.url)});\nconsole.log(asset);\n`;
+    if(typeof envEditor!=='undefined' && envEditor){
+      envEditor.setValue(envEditor.getValue()+'\n'+code);
+      showTab('env');
+    }
+  }
+}
 async function previewCopyUrl(){
   if(!_previewAsset?.url) return;
-  try{ await navigator.clipboard.writeText(_previewAsset.url); document.getElementById('asset-preview-meta').textContent='URL copied'; }catch(e){}
+  try{ await navigator.clipboard.writeText(_previewAsset.url); document.getElementById('asset-preview-meta').textContent='URL copied (still in-app)'; }catch(e){}
+}
+async function previewInsertPath(){
+  const p=_previewAsset?.r2Key||_previewAsset?.path||_previewAsset?.url;
+  if(!p) return;
+  try{ await navigator.clipboard.writeText(p); document.getElementById('asset-preview-meta').textContent='Path copied: '+p; }catch(e){}
+}
+async function previewDownloadInApp(){
+  if(!_previewAsset?.url) return;
+  try{
+    const src=_previewAsset.r2Key
+      ? (location.origin+'/api/r2/'+String(_previewAsset.r2Key).replace(/^\//,''))
+      : _previewAsset.url;
+    const r=await fetch(src);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(_previewAsset.name||'asset').replace(/[^\w.\-]+/g,'_');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  }catch(e){
+    document.getElementById('asset-preview-meta').textContent='Download failed: '+e.message;
+  }
 }
 
 async function downloadPolyHaven(slug){

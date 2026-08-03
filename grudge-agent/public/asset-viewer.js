@@ -179,12 +179,24 @@
     const isModel = kind === "model" || /\.(glb|gltf|fbx)$/i.test(url || "");
     const isImg = kind === "texture" || kind === "hdri" || kind === "image" || /\.(png|jpe?g|webp|hdr|exr)$/i.test(url || "");
 
-    if (isModel && url) show3D(body, url, name).catch((e) => {
-      if (foot) foot.textContent = "3D load failed: " + e.message;
-    });
-    else if (isImg && url) showImage(body, url, name);
-    else if (url) window.open(url, "_blank");
-    else if (foot) foot.textContent = "No preview URL";
+    if (isModel && url) {
+      show3D(body, url, name).catch((e) => {
+        if (foot) foot.textContent = "3D load failed: " + e.message;
+        const ph = body.querySelector(".viewer-placeholder");
+        if (ph) {
+          ph.style.display = "flex";
+          ph.textContent = "3D load failed — " + (e.message || "try Expand or Download in-app");
+        }
+      });
+    } else if (isImg && url) {
+      showImage(body, url, name);
+    } else if (url) {
+      // Stay in-app: try image first, never navigate away
+      showImage(body, url, name);
+      if (foot) foot.textContent = url;
+    } else if (foot) {
+      foot.textContent = "No preview URL";
+    }
   }
 
   function openInline(el, opts) {

@@ -1466,55 +1466,44 @@ app.get("/api/assets/polypizza", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-/* ── Grudge Studio assets ────────────────────────────────────── */
-app.get("/api/assets/grudge", async (_req, res) => {
-  try {
-    const r = await fetch("https://info.grudge-studio.com/api/assets").catch(() => null);
-    if (r?.ok) return res.json(await r.json());
-  } catch {}
-  // Fallback: curated list
-  res.json({ assets: [
-    { name:"Character Pack", type:"model", url:"https://grudge-studio.com/assets/characters", thumb:"https://grudge-studio.com/favicon.ico" },
-    { name:"Weapon Pack",    type:"model", url:"https://grudge-studio.com/assets/weapons",    thumb:"https://grudge-studio.com/favicon.ico" },
-    { name:"Environment",    type:"texture", url:"https://grudge-studio.com/assets/env",      thumb:"https://grudge-studio.com/favicon.ico" },
-  ]});
+/* ── Grudge Studio assets (in-app catalog — no external page hop) ─ */
+const { createAssetCatalog } = require("./lib/asset-catalog");
+const assetCatalog = createAssetCatalog({
+  r2Cdn: GRUDGE_R2_CDN,
+  objectStoreApi: `${GRUDGE_OBJECTSTORE_URL}/api/v1`,
 });
 
-/* ── Grudge R2 assets (ObjectStore registry + R2 CDN) ─────────── */
-// Lists Grudge assets from ObjectStore /api/assets/search and normalizes them to
-// the card shape the Assets tab renders. URLs resolve to the R2 CDN.
-app.get("/api/assets/r2", async (req, res) => {
-  const { q = "", category = "", limit = "60" } = req.query;
-  const params = new URLSearchParams();
-  const query = String(q || "").trim();
-  const cat = String(category || "").trim();
-  if (query) params.set("q", query);
-  if (cat && cat !== "all") params.set("category", cat);
-  if (!query && (!cat || cat === "all")) params.set("category", "character");
-  params.set("limit", String(Math.min(parseInt(limit, 10) || 60, 120)));
+app.get("/api/assets/grudge", async (req, res) => {
   try {
-    const r = await fetch(`${GRUDGE_ASSET_API}/api/assets/search?${params}`, { signal: AbortSignal.timeout(12000) });
-    if (r.ok) {
-      const d = await r.json();
-      const rows = d.results || d.assets || d.rows || (Array.isArray(d) ? d : []);
-      const cdn = (k) => (k ? `${GRUDGE_R2_CDN}/${String(k).replace(/^\//, "")}` : "");
-      const assets = rows.map((a) => {
-        const key = a.r2_key || a.r2Key || a.key || a.path || a.filename || "";
-        return {
-          name: a.name || (key.split("/").pop() || "asset"),
-          type: a.type || a.category || "model",
-          category: a.category || "",
-          tier: a.tier || a.iteration || "",
-          url: a.url || cdn(key) || a.download || "",
-          thumbnail: a.thumb || a.thumbnail || cdn(a.thumb_key || a.thumbKey),
-          r2Key: key,
-        };
-      });
-      return res.json({ assets, total: d.count || d.total || assets.length, source: "objectstore" });
-    }
-  } catch {}
-  res.json({ assets: [], total: 0, source: "fallback",
-    note: `ObjectStore asset search unreachable. Set GRUDGE_ASSET_API (now ${GRUDGE_ASSET_API}) or check connectivity.` });
+    const data = await assetCatalog.search(req.query);
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ assets: [], total: 0, note: e.message });
+  }
+});
+
+app.get("/api/assets/categories", async (_req, res) => {
+  try {
+    const cat = await assetCatalog.load();
+    res.json({ ok: true, categories: cat.categories, total: cat.total });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* Unified search: master-items + asset-registry + grudge6 → Assets tab cards */
+app.get("/api/assets/r2", async (req, res) => {
+  try {
+    const data = await assetCatalog.search(req.query);
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({
+      assets: [],
+      total: 0,
+      source: "error",
+      note: e.message,
+    });
+  }
 });
 
 // CORS-safe passthrough so the sandboxed Environment iframe can fetch GLB/FBX/
