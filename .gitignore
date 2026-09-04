@@ -18,3 +18,5 @@ terminals/
 mcps/
 agent-tools/documents-glb-scan.ndjson
 agent-tools/documents-glb-scan.json
+.vercel
+.env*

@@ -34,6 +34,7 @@
 <script src="/grudge-ai.js"></script>
 <script src="/legion-panel.js"></script>
 <script src="/studio-npm.js"></script>
+<script src="/vsc-web.js"></script>
 <script src="/treaty-chat.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-sso.js"></script>
 <script src="https://grudachain.grudge-studio.com/grudge-fleet-connect.js"></script>
@@ -280,6 +281,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .ide-tab .close-x{opacity:.4;font-size:.7rem;margin-left:3px;padding:1px 3px;border-radius:3px;}
 .ide-tab .close-x:hover{opacity:1;background:var(--border);}
 #monaco-container{flex:1;overflow:hidden;min-height:0;}
+.vsc-web-bar{padding:6px 10px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0}
+.vsc-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
+.vsc-label{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.vsc-hint{font-size:.68rem;color:var(--muted);line-height:1.4;margin:4px 0 2px}
 #ide-bottom{height:140px;min-height:140px;border-top:1px solid var(--border);background:#000;display:flex;flex-direction:column;}
 .ide-bottom-bar{padding:3px 10px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .ide-bottom-bar span{font-size:.68rem;color:var(--muted);}
@@ -739,7 +744,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <div class="studio-section">
           <h3>VS Code · open source</h3>
           <div id="studio-vscode-links"></div>
-          <p style="font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.45">The <strong>VS Code</strong> tab embeds <strong>Monaco Editor</strong> (the same editor engine as VS Code) plus a allow-listed terminal for <code>npm</code>, <code>node</code>, <code>git</code>, and <code>ollama</code> on local agent hosts.</p>
+          <p style="font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.45"><strong>Monaco</strong> is in this tab (same editor engine as VS Code). <strong>vscode.dev</strong> / <strong>github.dev</strong> open GitHub repos in Microsoft’s web VS Code (new tab — CSP). <a href="https://github.com/gitpod-io/openvscode-server" target="_blank" rel="noopener">OpenVSCode Server</a> is full VS Code + terminal on a VPS — not a Worker. Coder remains <code>coder.grudge-studio.com</code>.</p>
         </div>
         <div class="studio-section">
           <h3>Starter package.json</h3>
@@ -765,9 +770,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         </div>
         <!-- Editor + Terminal -->
         <div id="ide-center">
+          <div id="vsc-web-bar" class="vsc-web-bar"></div>
           <div id="ide-tabs">
             <div class="ide-tab active" id="ide-welcome-tab" style="color:var(--muted);font-size:.74rem;padding:6px 14px;cursor:default">
-              Monaco (VS Code OSS) · open a file · Terminal below
+              Monaco · vscode.dev GitHub · OpenVSCode Server
             </div>
           </div>
           <div id="monaco-container"></div>
@@ -1782,7 +1788,7 @@ function showTab(tab) {
   if(tab==="orch")   { try { GrudaOrchestrator.init(); } catch(e){} }
   if(tab==="cloud")  { loadIntegrations(); refreshCloudStorageUI(); }
   if(tab==="treaty") { updateTreatyAccountHint(); initTreaty(); }
-  if(tab==="ide")    { initMonaco(); refreshTree(); try{ GrudaTerminal.bind(); }catch(e){} }
+  if(tab==="ide")    { initMonaco(); refreshTree(); try{ GrudaTerminal.bind(); }catch(e){} try{ GrudaVscWeb.render(); }catch(e){} }
   if(tab==="assets") loadAssets();
   if(tab==="env")    initEnv();
   if(tab==="legion") { try { GrudaLegion.init(); } catch(e){} }
