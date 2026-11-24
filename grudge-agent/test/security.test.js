@@ -13,6 +13,7 @@ const crypto = require("node:crypto");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "gruda-sec-"));
 const ADMIN_KEY = "test-admin-key-" + crypto.randomBytes(8).toString("hex");
 const JWT_SECRET = "test-jwt-secret";
+const JWT_ISSUER = "https://id.test.invalid";
 const USERS = {
   "tok-alice": { uuid: "uuid-alice", username: "alice" },
   "tok-boss": { uuid: "uuid-boss", username: "boss" },
@@ -24,7 +25,7 @@ const relayed = [];
 function jwt(payload, { alg = "HS256", secret = JWT_SECRET } = {}) {
   const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const head = enc({ alg, typ: "JWT" });
-  const body = enc(payload);
+  const body = enc({ iss: JWT_ISSUER, ...payload });
   const sig = alg === "none" ? "" : crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
   return `${head}.${body}.${sig}`;
 }
@@ -58,6 +59,7 @@ before(async () => {
     MASTER_NODE_URL: "",
     GRUDA_AGENT_ADMIN_KEY: ADMIN_KEY,
     GRUDGE_JWT_SECRET: JWT_SECRET,
+    GRUDGE_JWT_ISSUER: JWT_ISSUER,
     GRUDA_ADMIN_PUTER_USERS: "boss",
     DATABASE_URL: "",
     XAI_API_KEY: "",
@@ -207,6 +209,8 @@ test("GrudgeID JWT rules: needs exp, HS256, right secret", async () => {
   assert.equal((await send(jwt({ grudge_id: "a", exp: now - 10 }))).status, 401, "expired");
   assert.equal((await send(jwt({ grudge_id: "a", exp: now + 60 }, { alg: "none" }))).status, 401, "alg none");
   assert.equal((await send(jwt({ grudge_id: "a", exp: now + 60 }, { secret: "wrong" }))).status, 401, "bad sig");
+  assert.equal((await send(jwt({ grudge_id: "a", exp: now + 60, iss: "https://evil.example" }))).status, 401, "wrong issuer");
+  assert.equal((await send(jwt({ grudge_id: "a", exp: now + 60, iss: undefined }))).status, 401, "no issuer");
   assert.equal((await send(jwt({ grudge_id: "a", exp: now + 60 }))).status, 200, "valid");
 });
 

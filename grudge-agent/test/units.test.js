@@ -35,10 +35,15 @@ test("route policy", () => {
   assert.equal(policyFor("POST", "/api/chat"), "public");
 });
 
-test("local trust: loopback without proxy headers only, never on cloud", async () => {
-  const saved = process.env.VERCEL;
+test("local trust: opt-in only, loopback without proxy headers, never on cloud", async () => {
+  const saved = process.env.VERCEL, savedTrust = process.env.GRUDA_LOCAL_TRUST;
   delete process.env.VERCEL;
   const req = (addr, headers) => ({ headers: headers || {}, socket: { remoteAddress: addr } });
+  delete process.env.GRUDA_LOCAL_TRUST;
+  assert.equal(await auth.identify(req("127.0.0.1")), null, "off unless GRUDA_LOCAL_TRUST=1");
+  process.env.GRUDA_LOCAL_TRUST = "true";
+  assert.equal(await auth.identify(req("127.0.0.1")), null, "only the exact value 1 opts in");
+  process.env.GRUDA_LOCAL_TRUST = "1";
   assert.equal((await auth.identify(req("127.0.0.1"))).kind, "local");
   assert.equal(await auth.identify(req("192.168.1.5")), null);
   assert.equal(await auth.identify(req("127.0.0.1", { "x-forwarded-for": "1.2.3.4" })), null);
@@ -46,4 +51,5 @@ test("local trust: loopback without proxy headers only, never on cloud", async (
   process.env.VERCEL = "1";
   assert.equal(await auth.identify(req("127.0.0.1")), null);
   if (saved === undefined) delete process.env.VERCEL; else process.env.VERCEL = saved;
+  if (savedTrust === undefined) delete process.env.GRUDA_LOCAL_TRUST; else process.env.GRUDA_LOCAL_TRUST = savedTrust;
 });
