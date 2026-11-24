@@ -39,34 +39,90 @@ function jwt(payload, secret) {
   return `${h}.${b}.${crypto.createHmac("sha256", secret).update(`${h}.${b}`).digest("base64url")}`;
 }
 
-test("M4 GrudgeID JWT fails closed without issuer or secret; no JWT_SECRET fallback", async () => {
-  const saved = { s: process.env.GRUDGE_JWT_SECRET, i: process.env.GRUDGE_JWT_ISSUER, j: process.env.JWT_SECRET, v: process.env.VERCEL };
+function signAlg(payload, alg, key) {
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const h = enc({ alg, typ: "JWT" }), b = enc(payload);
+  if (alg === "none") return `${h}.${b}.`;
+  if (alg === "RS256") return `${h}.${b}.${crypto.sign("RSA-SHA256", Buffer.from(`${h}.${b}`), key).toString("base64url")}`;
+  return `${h}.${b}.${crypto.createHmac("sha256", key).update(`${h}.${b}`).digest("base64url")}`;
+}
+
+// Shape of a real GrudgeID session (Grudge-Builder server/routes/auth.ts signToken):
+// HS256, expiresIn only, no iss; payload { userId, grudgeId, username, role, isAdmin }.
+function realSession(extra) {
+  const now = Math.floor(Date.now() / 1000);
+  return { userId: "u-123", grudgeId: "GRD-1", username: "warchief", role: "player", isAdmin: false, iat: now, exp: now + 365 * 86400, ...(extra || {}) };
+}
+
+async function withJwtEnv(env, fn) {
+  const keys = ["GRUDGE_JWT_SECRET", "GRUDGE_JWT_ISSUER", "JWT_SECRET", "VERCEL"];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   try {
-    process.env.VERCEL = "1";
-    const now = Math.floor(Date.now() / 1000);
-    const good = { grudge_id: "GRD-1", exp: now + 600, iss: "https://id.example" };
-    const req = (t) => ({ headers: { authorization: `Bearer ${t}` }, socket: { remoteAddress: "10.0.0.1" } });
-    const noPuter = { fetch: async () => ({ ok: false }) };
-
-    process.env.GRUDGE_JWT_SECRET = "s1"; process.env.GRUDGE_JWT_ISSUER = "https://id.example"; delete process.env.JWT_SECRET;
-    assert.equal((await auth.identify(req(jwt(good, "s1")), noPuter)).grudgeId, "GRD-1");
-    assert.equal(await auth.identify(req(jwt({ ...good, iss: "https://other" }, "s1")), noPuter), null, "wrong iss");
-
-    delete process.env.GRUDGE_JWT_ISSUER;
-    assert.equal(await auth.identify(req(jwt(good, "s1") + ""), noPuter), null, "issuer unset → rejected");
-
-    process.env.GRUDGE_JWT_ISSUER = "https://id.example"; delete process.env.GRUDGE_JWT_SECRET; process.env.JWT_SECRET = "s1";
-    assert.equal(await auth.identify(req(jwt(good, "s1") + "x"), noPuter), null);
-    assert.equal(await auth.identify(req(jwt({ ...good, n: 1 }, "s1")), noPuter), null, "JWT_SECRET is not a fallback");
-
-    assert.equal(auth.verifyGrudgeJwt(jwt(good, "s1"), "s1", now, ""), null, "explicit empty issuer");
-    assert.equal(auth.verifyGrudgeJwt(jwt(good, "s1"), "", now, "https://id.example"), null, "empty secret");
+    for (const k of keys) delete process.env[k];
+    Object.assign(process.env, { VERCEL: "1" }, env);
+    await fn();
   } finally {
-    for (const [k, v] of [["GRUDGE_JWT_SECRET", saved.s], ["GRUDGE_JWT_ISSUER", saved.i], ["JWT_SECRET", saved.j], ["VERCEL", saved.v]]) {
-      if (v === undefined) delete process.env[k]; else process.env[k] = v;
-    }
+    for (const k of keys) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
   }
-});
+}
+const jreq = (t) => ({ headers: { authorization: `Bearer ${t}` }, socket: { remoteAddress: "10.0.0.1" } });
+const noPuter = { fetch: async () => ({ ok: false }) };
+const who = (t) => auth.identify(jreq(t), noPuter);
+
+test("M4 a real-shaped GrudgeID session with no iss is accepted when GRUDGE_JWT_ISSUER is unset", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1" }, async () => {
+  const id = await who(signAlg(realSession(), "HS256", "s1"));
+  assert.equal(id && id.kind, "grudge");
+  assert.equal(id.grudgeId, "GRD-1");
+  assert.equal(id.userId, "u-123");
+  assert.equal(id.admin, false);
+  const onlyUser = await who(signAlg(realSession({ grudgeId: "" }), "HS256", "s1"));
+  assert.equal(onlyUser && onlyUser.id, "grudge-user:u-123", "userId alone is enough");
+  assert.equal((await who(signAlg(realSession({ role: "master" }), "HS256", "s1"))).admin, true, "master role is admin");
+  assert.equal((await who(signAlg(realSession({ role: "admin" }), "HS256", "s1"))).admin, true);
+}));
+
+test("M4 the same token is rejected when GRUDGE_JWT_ISSUER is set and doesn't match", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1", GRUDGE_JWT_ISSUER: "https://id.grudge-studio.com" }, async () => {
+  assert.equal(await who(signAlg(realSession(), "HS256", "s1")), null, "no iss");
+  assert.equal(await who(signAlg(realSession({ iss: "https://evil.example" }), "HS256", "s1")), null, "wrong iss");
+  const ok = await who(signAlg(realSession({ iss: "https://id.grudge-studio.com" }), "HS256", "s1"));
+  assert.equal(ok && ok.grudgeId, "GRD-1", "matching iss accepted");
+}));
+
+test("M4 RS256 and none-algorithm tokens are rejected (algorithms pinned to HS256)", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1" }, async () => {
+  const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+  assert.equal(await who(signAlg(realSession(), "RS256", privateKey)), null, "RS256");
+  assert.equal(await who(signAlg(realSession(), "none")), null, "none");
+  assert.equal(await who(signAlg(realSession(), "HS512", "s1")), null, "HS512");
+  // RS256 header with an HMAC made from the secret (alg confusion) is still refused
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const h = enc({ alg: "RS256", typ: "JWT" }), b = enc(realSession());
+  assert.equal(await who(`${h}.${b}.${crypto.createHmac("sha256", "s1").update(`${h}.${b}`).digest("base64url")}`), null, "alg confusion");
+}));
+
+test("M4 expired tokens and tokens without exp are rejected", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1" }, async () => {
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(await who(signAlg(realSession({ exp: now - 1 }), "HS256", "s1")), null, "expired");
+  assert.equal(await who(signAlg(realSession({ exp: undefined }), "HS256", "s1")), null, "no exp");
+  assert.equal(await who(signAlg(realSession({ exp: String(now + 600) }), "HS256", "s1")), null, "string exp");
+}));
+
+test("M4 launch tokens are not session identity", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1" }, async () => {
+  const now = Math.floor(Date.now() / 1000);
+  // Shape of Grudge-Builder mintLaunchToken: { type: "launch", userId, grudgeId, aud }, 60m
+  const launch = { type: "launch", userId: "u-123", grudgeId: "GRD-1", aud: "warlords", iat: now, exp: now + 3600 };
+  assert.equal(await who(signAlg(launch, "HS256", "s1")), null, "launch");
+  assert.equal(await who(signAlg({ ...launch, type: "refresh" }, "HS256", "s1")), null, "other typed token");
+  assert.equal(await who(signAlg(realSession({ userId: "", grudgeId: "" }), "HS256", "s1")), null, "needs userId or grudgeId");
+  assert.equal(await who(signAlg({ sub: "GRD-1", exp: now + 600 }, "HS256", "s1")), null, "sub alone is not enough");
+}));
+
+test("M4 every GrudgeID token is rejected when GRUDGE_JWT_SECRET is missing (no JWT_SECRET fallback)", () => withJwtEnv({ JWT_SECRET: "s1", GRUDGE_JWT_ISSUER: "" }, async () => {
+  assert.equal(await who(signAlg(realSession(), "HS256", "s1")), null, "JWT_SECRET is not used");
+  assert.equal(await who(signAlg(realSession(), "HS256", "")), null, "empty-key HMAC");
+  assert.equal(await who(signAlg(realSession(), "none")), null);
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(auth.verifyGrudgeJwt(signAlg(realSession(), "HS256", "s1"), "", now), null, "empty secret");
+}));
 
 test("M2 verifyPuterToken: temp accounts are not identities", async () => {
   const mk = (u) => ({ fetch: async () => ({ ok: true, json: async () => u }) });

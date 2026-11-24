@@ -3,10 +3,17 @@
  *
  * Accepted credentials (Authorization: Bearer <token>):
  *   1. GRUDA_AGENT_ADMIN_KEY (server key)            → admin
- *   2. GrudgeID JWT, HS256, signed with GRUDGE_JWT_SECRET, must carry exp and
- *      iss === GRUDGE_JWT_ISSUER. Fails closed: if either env var is unset,
- *      GrudgeID tokens are rejected (no JWT_SECRET fallback).
- *                                                    → grudge user (admin if tier admin/master_admin)
+ *   2. GrudgeID session JWT as minted by id.grudge-studio.com (Grudge-Builder
+ *      server/routes/auth.ts signToken: HS256, expiresIn only, no iss claim,
+ *      payload { userId, grudgeId, username, role, isAdmin }).
+ *      - GRUDGE_JWT_SECRET unset → every GrudgeID token is rejected (fail closed;
+ *        there is no JWT_SECRET fallback)
+ *      - alg must be HS256; exp is required and enforced
+ *      - iss is checked only when GRUDGE_JWT_ISSUER is set (real tokens carry none)
+ *      - launch tokens (type "launch", 60-minute app hand-off) and any other typed
+ *        token are not session identity and are rejected
+ *      - userId or grudgeId is required
+ *                                                    → grudge user (admin if role admin/master or isAdmin)
  *   3. Puter session token, checked live against api.puter.com/whoami. Temporary
  *      (anonymous) Puter accounts are not treated as signed in.
  *                                                    → puter user (admin if username in GRUDA_ADMIN_PUTER_USERS)
@@ -42,34 +49,42 @@ function b64urlDecode(s) {
 }
 
 /** HS256 only; rejects other algs, missing/expired exp, and bad signatures. */
+const JWT_ALGS = ["HS256"];
+const ADMIN_ROLES = new Set(["admin", "master", "master_admin", "owner"]);
+
 function verifyGrudgeJwt(token, secret, nowSec, issuer) {
-  const iss = issuer != null ? issuer : process.env.GRUDGE_JWT_ISSUER;
-  if (!secret || !iss) return null; // fail closed when not configured
+  if (!secret) return null; // fail closed when the secret isn't configured
+  const iss = issuer != null ? issuer : (process.env.GRUDGE_JWT_ISSUER || "");
   const parts = String(token).split(".");
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3 || !parts[2]) return null;
   let header, payload;
   try {
     header = JSON.parse(b64urlDecode(parts[0]).toString("utf8"));
     payload = JSON.parse(b64urlDecode(parts[1]).toString("utf8"));
   } catch { return null; }
-  if (!header || header.alg !== "HS256") return null;
+  if (!header || !JWT_ALGS.includes(header.alg)) return null; // no none, RS256, ES256, …
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const expected = crypto.createHmac("sha256", secret).update(`${parts[0]}.${parts[1]}`).digest();
   const given = b64urlDecode(parts[2]);
   if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
   const now = nowSec != null ? nowSec : Math.floor(Date.now() / 1000);
-  if (typeof payload.exp !== "number" || payload.exp < now) return null;
+  if (typeof payload.exp !== "number" || payload.exp <= now) return null;
   if (typeof payload.nbf === "number" && payload.nbf > now + 60) return null;
-  if (payload.iss !== iss) return null;
-  const grudgeId = String(payload.grudge_id || payload.grudgeId || payload.sub || "").trim();
-  if (!grudgeId) return null;
-  const tier = String(payload.tier || payload.role || "member");
+  if (iss && payload.iss !== iss) return null;
+  // Launch tokens (type "launch") are short app hand-offs, not sessions.
+  if (payload.type != null && payload.type !== "session") return null;
+  const grudgeId = String(payload.grudgeId || payload.grudge_id || "").trim();
+  const userId = String(payload.userId || payload.user_id || "").trim();
+  if (!grudgeId && !userId) return null;
+  const role = String(payload.role || payload.tier || "player").toLowerCase();
   return {
     kind: "grudge",
-    id: `grudge:${grudgeId}`,
-    grudgeId,
+    id: grudgeId ? `grudge:${grudgeId}` : `grudge-user:${userId}`,
+    grudgeId: grudgeId || null,
+    userId: userId || null,
     puterUuid: null,
-    username: String(payload.username || payload.name || grudgeId),
-    admin: tier === "admin" || tier === "master_admin",
+    username: String(payload.username || payload.name || grudgeId || userId),
+    admin: ADMIN_ROLES.has(role) || payload.isAdmin === true,
   };
 }
 
@@ -148,7 +163,7 @@ function requireAuth(opts) {
       if (!who) return res.status(401).json({ error: "sign in required", hint: "Sign in with Puter or Grudge ID" });
       if (opts.admin && !who.admin) {
         const configured = !!(process.env.GRUDA_ADMIN_PUTER_USERS || process.env.GRUDA_AGENT_ADMIN_KEY ||
-          (process.env.GRUDGE_JWT_SECRET && process.env.GRUDGE_JWT_ISSUER));
+          process.env.GRUDGE_JWT_SECRET);
         return res.status(403).json(configured ? { error: "admin only" }
           : { error: "admin not configured: set GRUDA_ADMIN_PUTER_USERS or GRUDA_AGENT_ADMIN_KEY" });
       }
