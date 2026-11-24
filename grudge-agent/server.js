@@ -19,7 +19,11 @@ const http   = require("http");
 const path   = require("path");
 const fs     = require("fs");
 const os     = require("os");
-const { execSync } = require("child_process");
+const { requireAuth, identify } = require("./lib/auth");
+const { policyFor } = require("./lib/route-policy");
+const { resolveInside, safeSegment } = require("./lib/safe-path");
+const { runCommand } = require("./lib/command-runner");
+const { checkPublicUrl } = require("./lib/url-guard");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const {
   FLEET_URLS,
@@ -299,6 +303,18 @@ function serveBrandIcon(req, res, next) {
 }
 
 app.use(express.json({ limit: "10mb" }));
+
+/* ── Auth gate ───────────────────────────────────────────────────
+   lib/route-policy.js lists which /api routes need a verified user or an
+   admin. Identity comes from a verified token (lib/auth.js), never the body. */
+const gateUser = requireAuth();
+const gateAdmin = requireAuth({ admin: true });
+app.use("/api", (req, res, next) => {
+  const level = policyFor(req.method, req.originalUrl.split("?")[0]);
+  if (level === "admin") return gateAdmin(req, res, next);
+  if (level === "user") return gateUser(req, res, next);
+  next();
+});
 app.get("/favicon.ico", serveBrandIcon);
 app.get("/favicon.svg", (req, res, next) => {
   if (sendPublicAsset(res, "gruda-king.svg") || sendPublicAsset(res, "favicon.ico")) return;
@@ -415,25 +431,40 @@ const TOOLS = [
 ];
 
 /* ── Tool Executor ───────────────────────────────────────────── */
-async function executeTool(name, args, projectDir) {
-  const dir = projectDir || PROJECTS_DIR;
+// Every path is confined to the workspace root with realpath checks
+// (lib/safe-path.js): no /proc, no env or key files, no dotfiles, no symlink
+// escapes. Commands run only in local mode (lib/command-runner.js, no shell).
+// Web fetches cannot reach private or metadata addresses.
+function agentRoot(projectName) {
+  const base = PROJECTS_DIR;
+  return projectName ? path.join(base, safeSegment(projectName)) : base;
+}
+
+async function executeTool(name, args, projectDir, opts) {
+  args = args || {};
+  const root = projectDir || PROJECTS_DIR;
+  const allowCommands = !!(opts && opts.allowCommands) && !process.env.VERCEL;
+  const inside = (p, o) => resolveInside(root, p, o);
   try {
     switch (name) {
       case "search_files": {
-        const searchDir = args.directory || dir;
+        const searchDir = inside(args.directory || ".", { mustExist: true });
+        const query = String(args.query || "").toLowerCase();
+        if (!query) return { error: "query required" };
         const results = [];
         const walk = (d, depth=0) => {
           if (depth > 6 || results.length >= 100) return;
           let entries; try { entries = fs.readdirSync(d, { withFileTypes:true }); } catch { return; }
           for (const e of entries) {
+            if (e.name.startsWith(".") || e.name === "node_modules" || e.isSymbolicLink()) continue;
             const full = path.join(d, e.name);
-            if (e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules") { walk(full, depth+1); }
+            if (e.isDirectory()) { walk(full, depth+1); }
             else if (e.isFile()) {
+              let ok;
+              try { ok = inside(path.relative(root, full)); } catch { continue; }
               if (args.type === "content") {
-                try { if (fs.readFileSync(full,"utf8").toLowerCase().includes(args.query.toLowerCase())) results.push(full); } catch {}
-              } else {
-                if (e.name.toLowerCase().includes(args.query.toLowerCase())) results.push(full);
-              }
+                try { if (fs.statSync(ok).size < 1024*1024 && fs.readFileSync(ok,"utf8").toLowerCase().includes(query)) results.push(path.relative(root, ok)); } catch {}
+              } else if (e.name.toLowerCase().includes(query)) results.push(path.relative(root, ok));
             }
           }
         };
@@ -441,35 +472,40 @@ async function executeTool(name, args, projectDir) {
         return { found: results.length, files: results };
       }
       case "read_file": {
-        if (!fs.existsSync(args.path)) return { error: `Not found: ${args.path}` };
-        const content = fs.readFileSync(args.path, "utf8");
-        return { path: args.path, content, lines: content.split("\n").length };
+        const fp = inside(args.path, { mustExist: true });
+        if (!fs.statSync(fp).isFile()) return { error: `Not a file: ${args.path}` };
+        const content = fs.readFileSync(fp, "utf8");
+        return { path: path.relative(root, fp), content, lines: content.split("\n").length };
       }
       case "write_file": {
-        fs.mkdirSync(path.dirname(args.path), { recursive: true });
-        fs.writeFileSync(args.path, args.content, "utf8");
-        return { ok: true, path: args.path, bytes: Buffer.byteLength(args.content) };
+        const fp = inside(args.path, { write: true });
+        const content = String(args.content == null ? "" : args.content);
+        fs.mkdirSync(path.dirname(fp), { recursive: true });
+        fs.writeFileSync(fp, content, "utf8");
+        return { ok: true, path: path.relative(root, fp), bytes: Buffer.byteLength(content) };
       }
       case "list_directory": {
-        const target = args.path || dir;
-        if (!fs.existsSync(target)) return { error: `Not found: ${target}` };
-        return { path: target, entries: fs.readdirSync(target, { withFileTypes:true }).map(e => ({
-          name: e.name, type: e.isDirectory() ? "folder" : "file",
-          ...(e.isFile() ? { size: fs.statSync(path.join(target,e.name)).size } : {})
-        }))};
+        const target = inside(args.path || ".", { mustExist: true });
+        return { path: path.relative(root, target) || ".", entries: fs.readdirSync(target, { withFileTypes:true })
+          .filter(e => !e.name.startsWith("."))
+          .map(e => ({
+            name: e.name, type: e.isDirectory() ? "folder" : "file",
+            ...(e.isFile() ? { size: fs.statSync(path.join(target,e.name)).size } : {})
+          }))};
       }
       case "create_folder": {
-        fs.mkdirSync(args.path, { recursive: true });
-        return { ok: true, path: args.path };
+        const fp = inside(args.path, { write: true });
+        fs.mkdirSync(fp, { recursive: true });
+        return { ok: true, path: path.relative(root, fp) };
       }
       case "update_memory": {
-        const memPath = path.join(dir, "gruda.md");
-        let content = args.content;
+        const memPath = inside("gruda.md", { write: true });
+        let content = String(args.content || "");
         if (args.append && fs.existsSync(memPath)) {
-          content = fs.readFileSync(memPath, "utf8") + "\n\n---\n\n" + args.content;
+          content = fs.readFileSync(memPath, "utf8") + "\n\n---\n\n" + content;
         }
         fs.writeFileSync(memPath, content, "utf8");
-        return { ok: true, path: memPath };
+        return { ok: true, path: "gruda.md" };
       }
       case "web_search": {
         if (BRAVE_KEY) {
@@ -488,23 +524,27 @@ async function executeTool(name, args, projectDir) {
         }
       }
       case "run_command": {
-        const cwd = args.cwd || dir;
-        const out = execSync(args.command, { cwd, timeout:30000, encoding:"utf8", stdio:"pipe" });
-        return { ok:true, output: out.slice(0,8000) };
+        if (!allowCommands) return { error: "run_command is only available in the local agent (npx gruda-agent), not on the cloud host" };
+        const cwd = inside(args.cwd || ".", { mustExist: true });
+        const out = runCommand(args.command, { cwd, timeout: 30000 });
+        return { ok:true, output: String(out).slice(0,8000) };
       }
       case "unzip": {
         const AdmZip = require("adm-zip");
-        if (!fs.existsSync(args.path)) return { error: `Not found: ${args.path}` };
-        const dest = args.dest || path.join(path.dirname(args.path), path.basename(args.path, path.extname(args.path)));
+        const zipPath = inside(args.path, { mustExist: true });
+        const dest = inside(args.dest || path.join(path.dirname(path.relative(root, zipPath)), path.basename(zipPath, path.extname(zipPath))), { write: true });
+        const zip = new AdmZip(zipPath);
+        // Zip-slip guard: every entry must land inside dest and pass the same checks.
+        for (const entry of zip.getEntries()) resolveInside(dest, entry.entryName, { write: true });
         fs.mkdirSync(dest, { recursive: true });
-        new AdmZip(args.path).extractAllTo(dest, true);
-        return { ok:true, dest, files: fs.readdirSync(dest).slice(0, 200) };
+        zip.extractAllTo(dest, true);
+        return { ok:true, dest: path.relative(root, dest), files: fs.readdirSync(dest).slice(0, 200) };
       }
       case "convert_file": {
-        if (!fs.existsSync(args.path)) return { error: `Not found: ${args.path}` };
-        const raw = fs.readFileSync(args.path);
-        const ext = path.extname(args.path).toLowerCase();
-        const outPath = args.out || (args.path + "." + args.to);
+        const src = inside(args.path, { mustExist: true });
+        const raw = fs.readFileSync(src);
+        const ext = path.extname(src).toLowerCase();
+        const outPath = inside(args.out || (path.relative(root, src) + "." + args.to), { write: true });
         let outData;
         if (args.to === "base64")      outData = raw.toString("base64");
         else if (args.to === "text")   outData = raw.toString("utf8");
@@ -520,14 +560,19 @@ async function executeTool(name, args, projectDir) {
         }
         else outData = raw.toString("utf8");
         fs.writeFileSync(outPath, outData, "utf8");
-        return { ok:true, out: outPath, bytes: Buffer.byteLength(outData) };
+        return { ok:true, out: path.relative(root, outPath), bytes: Buffer.byteLength(outData) };
       }
       case "open_url": {
-        const r = await fetch(args.url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "gruda-agent" } });
+        const url = checkPublicUrl(args.url);
+        const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "gruda-agent" }, redirect: "manual" });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          return { ok:false, status:r.status, url, redirect: loc ? checkPublicUrl(new URL(loc, url).toString()) : null, note: "redirect not followed; call open_url on the redirect url" };
+        }
         const text = (await r.text())
           .replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "")
           .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        return { ok:r.ok, status:r.status, url:args.url, text: text.slice(0, 6000) };
+        return { ok:r.ok, status:r.status, url, text: text.slice(0, 6000) };
       }
       default: return { error: `Unknown tool: ${name}` };
     }
@@ -536,14 +581,18 @@ async function executeTool(name, args, projectDir) {
 
 /* ── Agent SSE stream (Ollama local · Grok cloud) ───────────── */
 app.post("/api/agent/stream", async (req, res) => {
-  const { messages, model, projectDir, systemExtra } = req.body;
+  // projectDir from the body is ignored: tools are confined to the workspace.
+  const { messages, model, projectName, systemExtra } = req.body;
   if (!messages) return res.status(400).json({ error:"messages required" });
+  const toolOpts = { allowCommands: !!(req.identity && req.identity.admin) };
+  const runTool = (n, a, d) => executeTool(n, a, d, toolOpts);
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   const emit = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
-  const pDir = projectDir || PROJECTS_DIR;
+  const pDir = agentRoot(projectName);
+  fs.mkdirSync(pDir, { recursive: true });
   const memPath = path.join(pDir, "gruda.md");
   const memory  = fs.existsSync(memPath) ? fs.readFileSync(memPath, "utf8") : "";
   const cfg     = loadConfig();
@@ -556,7 +605,7 @@ app.post("/api/agent/stream", async (req, res) => {
   if (useGrok && grokBuild.hasGrokApi()) {
     await grokBuild.runGrokAgentLoop({
       emit, messages, model: grokModel, tools: TOOLS,
-      executeTool, projectDir: pDir, system,
+      executeTool: runTool, projectDir: pDir, system,
     });
     return res.end();
   }
@@ -606,7 +655,7 @@ app.post("/api/agent/stream", async (req, res) => {
       const toolArgs = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function.arguments||{});
       emit({ type:"tool_call", tool:toolName, args:toolArgs });
       emit({ type:"tool_start", tool:toolName, args:toolArgs });
-      const result = await executeTool(toolName, toolArgs, pDir);
+      const result = await runTool(toolName, toolArgs, pDir);
       toolLog.push({ tool:toolName, args:toolArgs, result });
       emit({ type:"tool_result", tool:toolName, result });
       loopMsgs.push({ role:"tool", content:JSON.stringify(result) });
@@ -622,11 +671,13 @@ app.get("/api/agent/tools", (_req, res) => {
 
 // Single tool execution — used by browser-side Ollama agent loop on Vercel/cloud
 app.post("/api/agent/tool", async (req, res) => {
-  const { tool, args, projectDir, projectName } = req.body || {};
+  // projectDir from the body is ignored: tools are confined to the workspace.
+  const { tool, args, projectName } = req.body || {};
   if (!tool) return res.status(400).json({ error: "tool required" });
-  const pDir = projectDir || (projectName ? path.join(PROJECTS_DIR, projectName) : PROJECTS_DIR);
+  const pDir = agentRoot(projectName);
+  fs.mkdirSync(pDir, { recursive: true });
   try {
-    const result = await executeTool(tool, args || {}, pDir);
+    const result = await executeTool(tool, args || {}, pDir, { allowCommands: !!(req.identity && req.identity.admin) });
     res.json({ ok: true, tool, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1109,7 +1160,23 @@ app.get("/api/history", async (_req, res) => {
 app.post("/api/history", (req, res) => { appendSession(req.body); res.json({ ok:true }); });
 
 /* ── Config ──────────────────────────────────────────────────── */
-app.get("/api/config",       (_req, res) => res.json(loadConfig()));
+// Stored integration tokens never leave the server except to an admin.
+function redactConfig(cfg) {
+  const out = { ...cfg };
+  if (out.integrations && typeof out.integrations === "object") {
+    out.integrations = Object.fromEntries(Object.entries(out.integrations).map(([k, v]) => {
+      if (!v || typeof v !== "object") return [k, v ? { connected: true } : v];
+      const { token, apiKey, secret, ...rest } = v;
+      return [k, { ...rest, ...(token || apiKey || secret ? { connected: true } : {}) }];
+    }));
+  }
+  for (const k of Object.keys(out)) if (/token|secret|api[_-]?key|password/i.test(k)) delete out[k];
+  return out;
+}
+app.get("/api/config", (req, res) => {
+  const cfg = loadConfig();
+  res.json(req.identity && req.identity.admin ? cfg : redactConfig(cfg));
+});
 app.patch("/api/config", (req, res) => {
   const cfg = { ...loadConfig(), ...req.body };
   saveConfig(cfg);
@@ -1189,13 +1256,14 @@ app.get("/api/treaty/room/:id/messages", async (req, res) => {
 
 app.post("/api/treaty/room/:id/send", async (req, res) => {
   const roomId = treatyChat.normalizeRoomId(req.params.id);
-  const sender = treatyChat.normalizeSender(req.body);
+  const sender = treatyChat.senderFromIdentity(req.identity);
   const text = String(req.body?.text || "").trim();
   if (!text) return res.status(400).json({ error: "text required" });
   const msg = treatyChat.makeMessage(roomId, sender, text);
   treatyChat.appendMessage(fs, TREATY_DIR, roomId, msg);
   pgAppendTreaty(msg);
-  if (sender.grudgeId) await socialRelaySend(roomId, sender.grudgeId, text);
+  const relayId = sender.grudgeId || sender.puterUuid;
+  if (relayId) await socialRelaySend(roomId, relayId, text);
   broadcast({ type: "treaty_msg", data: msg });
   res.json({ ok: true, message: msg });
 });
@@ -1203,13 +1271,14 @@ app.post("/api/treaty/room/:id/send", async (req, res) => {
 // Legacy endpoint — same as room send (default room: general)
 app.post("/api/treaty/send", async (req, res) => {
   const roomId = treatyChat.normalizeRoomId(req.body?.roomId || req.body?.room || "general");
-  const sender = treatyChat.normalizeSender(req.body);
+  const sender = treatyChat.senderFromIdentity(req.identity);
   const text = String(req.body?.text || req.body?.message || "").trim();
   if (!text) return res.status(400).json({ error: "text required" });
   const msg = treatyChat.makeMessage(roomId, sender, text);
   treatyChat.appendMessage(fs, TREATY_DIR, roomId, msg);
   pgAppendTreaty(msg);
-  if (sender.grudgeId) await socialRelaySend(roomId, sender.grudgeId, text);
+  const relayId = sender.grudgeId || sender.puterUuid;
+  if (relayId) await socialRelaySend(roomId, relayId, text);
   broadcast({ type: "treaty_msg", data: msg });
   res.json({ ok: true, message: msg, relayed: true });
 });
@@ -1315,9 +1384,13 @@ app.get("/api/app/paths", (_req, res) => {
 // would escape the projects root. ?dir=C:\... or ../ traversal resolves outside
 // the base and is rejected.
 function safeProjectPath(rel) {
-  const base = path.resolve(PROJECTS_DIR);
-  const resolved = path.resolve(base, rel || "");
-  return (resolved === base || resolved.startsWith(base + path.sep)) ? resolved : null;
+  // Accepts paths relative to PROJECTS_DIR, or absolute paths inside it.
+  try {
+    const base = path.resolve(PROJECTS_DIR);
+    const r = String(rel || "");
+    const relToBase = path.isAbsolute(r) ? path.relative(base, r) : r;
+    return resolveInside(base, relToBase || ".");
+  } catch { return null; }
 }
 
 /* ── Run code (Node.js sandbox) ──────────────────────────────── */
@@ -1820,14 +1893,18 @@ app.get("/api/llm/probe", async (_req, res) => {
 });
 
 app.post("/api/terminal/exec", (req, res) => {
+  if (process.env.VERCEL) {
+    return res.status(503).json({ error: "The terminal runs only in the local agent (npx gruda-agent), not on the cloud host." });
+  }
   const { command, cwd } = req.body || {};
   if (!command) return res.status(400).json({ error: "command required" });
   if (!orchestratorHub.isTerminalAllowed(command)) {
-    return res.status(403).json({ error: "Command not in allow-list (npm, node, git, ollama, dir, ls, …)" });
+    return res.status(403).json({ error: "Command not in allow-list (npm, npx, pnpm, node, git, python, ollama, ls)" });
   }
-  const workDir = cwd || PROJECTS_DIR;
+  const workDir = safeProjectPath(cwd || ".");
+  if (!workDir) return res.status(400).json({ error: "cwd must be inside the projects folder" });
   try {
-    const out = execSync(command, { cwd: workDir, timeout: 45000, encoding: "utf8", stdio: "pipe" });
+    const out = runCommand(command, { cwd: workDir, timeout: 45000 });
     res.json({ ok: true, cwd: workDir, output: out.slice(0, 12000) });
   } catch (err) {
     res.status(200).json({

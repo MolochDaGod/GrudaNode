@@ -27,6 +27,22 @@ function normalizeSender(body) {
   };
 }
 
+/**
+ * Sender for a Treaty message, taken only from a verified identity
+ * (lib/auth.js). The request body can no longer choose who a message is from.
+ */
+function senderFromIdentity(identity) {
+  if (!identity || !identity.id) throw new Error("verified identity required");
+  const username = String(identity.username || "").trim().slice(0, 64) || "player";
+  return {
+    grudgeId: identity.grudgeId || null,
+    puterUuid: identity.puterUuid || null,
+    username,
+    displayName: username,
+    verified: true,
+  };
+}
+
 function makeMessage(roomId, sender, text) {
   return {
     id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -82,6 +98,7 @@ module.exports = {
   DEFAULT_ROOMS,
   normalizeRoomId,
   normalizeSender,
+  senderFromIdentity,
   makeMessage,
   readRoomMessages,
   writeRoomMessages,
