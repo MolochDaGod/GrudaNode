@@ -3,12 +3,16 @@
  *
  * Accepted credentials (Authorization: Bearer <token>):
  *   1. GRUDA_AGENT_ADMIN_KEY (server key)            → admin
- *   2. GrudgeID JWT, HS256, signed with GRUDGE_JWT_SECRET or JWT_SECRET,
- *      must carry exp                                → grudge user (admin if tier admin/master_admin)
- *   3. Puter session token, checked live against api.puter.com/whoami
+ *   2. GrudgeID JWT, HS256, signed with GRUDGE_JWT_SECRET, must carry exp and
+ *      iss === GRUDGE_JWT_ISSUER. Fails closed: if either env var is unset,
+ *      GrudgeID tokens are rejected (no JWT_SECRET fallback).
+ *                                                    → grudge user (admin if tier admin/master_admin)
+ *   3. Puter session token, checked live against api.puter.com/whoami. Temporary
+ *      (anonymous) Puter accounts are not treated as signed in.
  *                                                    → puter user (admin if username in GRUDA_ADMIN_PUTER_USERS)
- *   4. Local mode only (not on Vercel, GRUDA_LOCAL_TRUST != "0"): a request from
- *      the loopback interface with no proxy headers   → local owner (admin)
+ *   4. Opt-in local mode only (GRUDA_LOCAL_TRUST=1, set by the `gruda-agent` CLI,
+ *      never on Vercel): a request from the loopback interface with no proxy
+ *      headers                                       → local owner (admin)
  *
  * Identity always comes from a verified credential, never from the request body.
  * Fails closed: no credential → null.
@@ -38,8 +42,9 @@ function b64urlDecode(s) {
 }
 
 /** HS256 only; rejects other algs, missing/expired exp, and bad signatures. */
-function verifyGrudgeJwt(token, secret, nowSec) {
-  if (!secret) return null;
+function verifyGrudgeJwt(token, secret, nowSec, issuer) {
+  const iss = issuer != null ? issuer : process.env.GRUDGE_JWT_ISSUER;
+  if (!secret || !iss) return null; // fail closed when not configured
   const parts = String(token).split(".");
   if (parts.length !== 3) return null;
   let header, payload;
@@ -54,8 +59,7 @@ function verifyGrudgeJwt(token, secret, nowSec) {
   const now = nowSec != null ? nowSec : Math.floor(Date.now() / 1000);
   if (typeof payload.exp !== "number" || payload.exp < now) return null;
   if (typeof payload.nbf === "number" && payload.nbf > now + 60) return null;
-  const iss = process.env.GRUDGE_JWT_ISSUER;
-  if (iss && payload.iss !== iss) return null;
+  if (payload.iss !== iss) return null;
   const grudgeId = String(payload.grudge_id || payload.grudgeId || payload.sub || "").trim();
   if (!grudgeId) return null;
   const tier = String(payload.tier || payload.role || "member");
@@ -81,7 +85,8 @@ async function verifyPuterToken(token, fetchImpl) {
     });
     if (r.ok) {
       const u = await r.json();
-      if (u && u.uuid && u.username) {
+      // Temporary / anonymous Puter accounts don't count as signed in.
+      if (u && u.uuid && u.username && !u.is_temp && !u.is_anonymous) {
         const admins = String(process.env.GRUDA_ADMIN_PUTER_USERS || "")
           .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
         identity = {
@@ -90,8 +95,8 @@ async function verifyPuterToken(token, fetchImpl) {
           grudgeId: null,
           puterUuid: String(u.uuid),
           username: String(u.username),
-          temp: !!u.is_temp,
-          admin: !u.is_temp && admins.includes(String(u.username).toLowerCase()),
+          temp: false,
+          admin: admins.includes(String(u.username).toLowerCase()),
         };
       }
     }
@@ -107,7 +112,8 @@ function isLoopback(addr) {
 }
 
 function localIdentity(req) {
-  if (isCloud() || process.env.GRUDA_LOCAL_TRUST === "0") return null;
+  // Opt-in only: the `gruda-agent` CLI sets GRUDA_LOCAL_TRUST=1. Never on Vercel.
+  if (isCloud() || process.env.GRUDA_LOCAL_TRUST !== "1") return null;
   // Tunnels and proxies (cloudflared, nginx, Vercel) connect from loopback but add these.
   const h = req.headers || {};
   if (h["x-forwarded-for"] || h["forwarded"] || h["x-real-ip"] || h["cf-connecting-ip"] || h["x-vercel-id"]) return null;
@@ -124,7 +130,7 @@ async function identify(req, opts) {
       return { kind: "admin", id: "admin:key", grudgeId: null, puterUuid: null, username: "admin", admin: true };
     }
     if (token.split(".").length === 3) {
-      const jwt = verifyGrudgeJwt(token, process.env.GRUDGE_JWT_SECRET || process.env.JWT_SECRET || "");
+      const jwt = verifyGrudgeJwt(token, process.env.GRUDGE_JWT_SECRET || "");
       if (jwt) return jwt;
     }
     const p = await verifyPuterToken(token, opts.fetch);
@@ -140,7 +146,12 @@ function requireAuth(opts) {
     try {
       const who = req.identity || (await identify(req, opts));
       if (!who) return res.status(401).json({ error: "sign in required", hint: "Sign in with Puter or Grudge ID" });
-      if (opts.admin && !who.admin) return res.status(403).json({ error: "admin only" });
+      if (opts.admin && !who.admin) {
+        const configured = !!(process.env.GRUDA_ADMIN_PUTER_USERS || process.env.GRUDA_AGENT_ADMIN_KEY ||
+          (process.env.GRUDGE_JWT_SECRET && process.env.GRUDGE_JWT_ISSUER));
+        return res.status(403).json(configured ? { error: "admin only" }
+          : { error: "admin not configured: set GRUDA_ADMIN_PUTER_USERS or GRUDA_AGENT_ADMIN_KEY" });
+      }
       req.identity = who;
       next();
     } catch (err) {
