@@ -77,8 +77,13 @@ test("M4 a real-shaped GrudgeID session with no iss is accepted when GRUDGE_JWT_
   assert.equal(id.admin, false);
   const onlyUser = await who(signAlg(realSession({ grudgeId: "" }), "HS256", "s1"));
   assert.equal(onlyUser && onlyUser.id, "grudge-user:u-123", "userId alone is enough");
-  assert.equal((await who(signAlg(realSession({ role: "master" }), "HS256", "s1"))).admin, true, "master role is admin");
-  assert.equal((await who(signAlg(realSession({ role: "admin" }), "HS256", "s1"))).admin, true);
+  // Builder/GrudgeID admin claims never make a gruda-agent admin (Jonathan, Nov 24 2026).
+  for (const extra of [{ role: "master" }, { role: "admin" }, { role: "master_admin" }, { role: "owner" }, { isAdmin: true },
+                       { tier: "admin" }, { role: "admin", isAdmin: true }]) {
+    const id = await who(signAlg(realSession(extra), "HS256", "s1"));
+    assert.equal(id && id.kind, "grudge", "still signed in: " + JSON.stringify(extra));
+    assert.equal(id.admin, false, "not admin: " + JSON.stringify(extra));
+  }
 }));
 
 test("M4 the same token is rejected when GRUDGE_JWT_ISSUER is set and doesn't match", () => withJwtEnv({ GRUDGE_JWT_SECRET: "s1", GRUDGE_JWT_ISSUER: "https://id.grudge-studio.com" }, async () => {

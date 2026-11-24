@@ -13,7 +13,10 @@
  *      - launch tokens (type "launch", 60-minute app hand-off) and any other typed
  *        token are not session identity and are rejected
  *      - userId or grudgeId is required
- *                                                    → grudge user (admin if role admin/master or isAdmin)
+ *                                                    → grudge user, never admin: Builder/GrudgeID
+ *        roles (admin, master, isAdmin) do not carry over to gruda-agent
+ *        (Jonathan, Nov 24 2026). Agent admin comes only from the admin key,
+ *        the GRUDA_ADMIN_PUTER_USERS list, or the opt-in local owner.
  *   3. Puter session token, checked live against api.puter.com/whoami. Temporary
  *      (anonymous) Puter accounts are not treated as signed in.
  *                                                    → puter user (admin if username in GRUDA_ADMIN_PUTER_USERS)
@@ -50,7 +53,6 @@ function b64urlDecode(s) {
 
 /** HS256 only; rejects other algs, missing/expired exp, and bad signatures. */
 const JWT_ALGS = ["HS256"];
-const ADMIN_ROLES = new Set(["admin", "master", "master_admin", "owner"]);
 
 function verifyGrudgeJwt(token, secret, nowSec, issuer) {
   if (!secret) return null; // fail closed when the secret isn't configured
@@ -76,7 +78,6 @@ function verifyGrudgeJwt(token, secret, nowSec, issuer) {
   const grudgeId = String(payload.grudgeId || payload.grudge_id || "").trim();
   const userId = String(payload.userId || payload.user_id || "").trim();
   if (!grudgeId && !userId) return null;
-  const role = String(payload.role || payload.tier || "player").toLowerCase();
   return {
     kind: "grudge",
     id: grudgeId ? `grudge:${grudgeId}` : `grudge-user:${userId}`,
@@ -84,7 +85,7 @@ function verifyGrudgeJwt(token, secret, nowSec, issuer) {
     userId: userId || null,
     puterUuid: null,
     username: String(payload.username || payload.name || grudgeId || userId),
-    admin: ADMIN_ROLES.has(role) || payload.isAdmin === true,
+    admin: false, // Builder admin ≠ gruda-agent admin; role / isAdmin claims are ignored
   };
 }
 
@@ -162,8 +163,7 @@ function requireAuth(opts) {
       const who = req.identity || (await identify(req, opts));
       if (!who) return res.status(401).json({ error: "sign in required", hint: "Sign in with Puter or Grudge ID" });
       if (opts.admin && !who.admin) {
-        const configured = !!(process.env.GRUDA_ADMIN_PUTER_USERS || process.env.GRUDA_AGENT_ADMIN_KEY ||
-          process.env.GRUDGE_JWT_SECRET);
+        const configured = !!(process.env.GRUDA_ADMIN_PUTER_USERS || process.env.GRUDA_AGENT_ADMIN_KEY);
         return res.status(403).json(configured ? { error: "admin only" }
           : { error: "admin not configured: set GRUDA_ADMIN_PUTER_USERS or GRUDA_AGENT_ADMIN_KEY" });
       }

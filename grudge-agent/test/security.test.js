@@ -219,3 +219,26 @@ test("public reads still work without sign-in", async () => {
   assert.equal((await call("GET", "/api/treaty/room/general/messages")).status, 200);
   assert.equal((await call("GET", "/api/agent/tools")).status, 200);
 });
+
+test("Builder/GrudgeID admin claims are not gruda-agent admin; admin key and Puter list are", async () => {
+  // Jonathan, Nov 24 2026: Builder admins do NOT become Gruda agent admins.
+  const exp = Math.floor(Date.now() / 1000) + 600;
+  const claims = [{ role: "admin" }, { role: "master" }, { isAdmin: true }, { role: "master_admin", isAdmin: true }, { tier: "admin" }];
+  for (const extra of claims) {
+    const tok = jwt({ userId: "u-9", grudgeId: "GRD-9", username: "builder-boss", exp, ...extra });
+    const label = JSON.stringify(extra);
+    assert.equal((await call("PATCH", "/api/config", { token: tok, body: { displayName: "nope" } })).status, 403, "PATCH config " + label);
+    assert.equal((await call("POST", "/api/integrations/github", { token: tok, body: { token: "x" } })).status, 403, "integrations " + label);
+    assert.equal((await call("GET", "/api/deploy/github/repos", { token: tok })).status, 403, "repo list " + label);
+    // still a signed-in user
+    assert.equal((await call("GET", "/api/config", { token: tok })).status, 200, "user route " + label);
+    const t = await tool(tok, "list_directory", {});
+    assert.equal(t.status, 200, "agent tool " + label);
+  }
+  const cfg = await call("GET", "/api/config", { token: ADMIN_KEY });
+  assert.notEqual(cfg.json && cfg.json.displayName, "nope", "config unchanged");
+  // the two real admin paths still work
+  assert.equal((await call("PATCH", "/api/config", { token: ADMIN_KEY, body: {} })).status, 200, "admin key");
+  assert.equal((await call("PATCH", "/api/config", { token: "tok-boss", body: {} })).status, 200, "Puter admin list");
+  assert.equal((await call("PATCH", "/api/config", { token: "tok-alice", body: {} })).status, 403, "Puter non-admin");
+});
