@@ -16,6 +16,8 @@ COPY . .
 # Data dirs
 ENV DATA_DIR=/data
 ENV PROJECTS_DIR=/projects
+# Containers must listen on all interfaces; local owner trust stays off (sign in).
+ENV GRUDA_HOST=0.0.0.0
 RUN mkdir -p /data /projects
 
 EXPOSE 3200

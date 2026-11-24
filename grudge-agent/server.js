@@ -20,10 +20,11 @@ const path   = require("path");
 const fs     = require("fs");
 const os     = require("os");
 const { requireAuth, identify } = require("./lib/auth");
-const { policyFor } = require("./lib/route-policy");
+const { policyFor, normalizeApiPath, isApiPath } = require("./lib/route-policy");
 const { resolveInside, safeSegment } = require("./lib/safe-path");
 const { runCommand } = require("./lib/command-runner");
-const { checkPublicUrl } = require("./lib/url-guard");
+const { checkPublicUrl, safeFetchText } = require("./lib/url-guard");
+const { installAsyncGuard, errorHandler, installProcessGuards } = require("./lib/async-guard");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const {
   FLEET_URLS,
@@ -274,6 +275,13 @@ function buildPersona(cfg, memory, systemExtra, insightMap) {
 
 /* ── Express + WS ────────────────────────────────────────────── */
 const app    = express();
+// Exact-case, exact-slash routing: /API/x and /api/x/ never reach the /api/x handler.
+// Must be set before the first route/middleware creates the router.
+app.set("case sensitive routing", true);
+app.set("strict routing", true);
+// Async handler errors become JSON 4xx/5xx instead of hangs + unhandledRejection.
+installAsyncGuard(app);
+installProcessGuards();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -305,12 +313,25 @@ function serveBrandIcon(req, res, next) {
 app.use(express.json({ limit: "10mb" }));
 
 /* ── Auth gate ───────────────────────────────────────────────────
-   lib/route-policy.js lists which /api routes need a verified user or an
-   admin. Identity comes from a verified token (lib/auth.js), never the body. */
+   lib/route-policy.js: /api is deny-by-default. Only listed public routes skip
+   auth; admin routes need an admin; everything else needs a verified user.
+   The path is normalized first (decode, lowercase, collapse and strip slashes)
+   and encoded traversal is refused. The gate runs on every request (no mount
+   path), so case or slash variants can't skip it. Identity comes from a
+   verified token (lib/auth.js), never the body. */
 const gateUser = requireAuth();
 const gateAdmin = requireAuth({ admin: true });
-app.use("/api", (req, res, next) => {
-  const level = policyFor(req.method, req.originalUrl.split("?")[0]);
+app.use((req, res, next) => {
+  const rawPath = String(req.originalUrl || req.url || "").split("?")[0];
+  const n = normalizeApiPath(rawPath);
+  if (!n.ok) {
+    // Anything that looks like an API call with a bad path is refused; other
+    // paths fall through to static serving (which has its own traversal guard).
+    if (/(^|\/)api(\/|%2f|$)/i.test(rawPath) || /^\/+%61/i.test(rawPath)) return res.status(400).json({ error: n.reason });
+    return next();
+  }
+  if (!isApiPath(n.path)) return next();
+  const level = policyFor(req.method, n.path);
   if (level === "admin") return gateAdmin(req, res, next);
   if (level === "user") return gateUser(req, res, next);
   next();
@@ -563,16 +584,20 @@ async function executeTool(name, args, projectDir, opts) {
         return { ok:true, out: path.relative(root, outPath), bytes: Buffer.byteLength(outData) };
       }
       case "open_url": {
-        const url = checkPublicUrl(args.url);
-        const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "gruda-agent" }, redirect: "manual" });
+        // DNS is resolved and every address checked at connect time (lib/url-guard.js).
+        const r = await safeFetchText(args.url, { timeoutMs: 15000 });
+        const url = r.url;
         if (r.status >= 300 && r.status < 400) {
-          const loc = r.headers.get("location");
-          return { ok:false, status:r.status, url, redirect: loc ? checkPublicUrl(new URL(loc, url).toString()) : null, note: "redirect not followed; call open_url on the redirect url" };
+          const loc = r.headers.location;
+          let redirect = null;
+          try { redirect = loc ? checkPublicUrl(new URL(loc, url).toString()) : null; } catch { redirect = null; }
+          return { ok:false, status:r.status, url, redirect, note: "redirect not followed; call open_url on the redirect url" };
         }
-        const text = (await r.text())
+        const r_ok = r.status >= 200 && r.status < 300;
+        const text = (r.text)
           .replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "")
           .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        return { ok:r.ok, status:r.status, url, text: text.slice(0, 6000) };
+        return { ok:r_ok, status:r.status, url, text: text.slice(0, 6000) };
       }
       default: return { error: `Unknown tool: ${name}` };
     }
@@ -1042,6 +1067,18 @@ app.post("/api/models/pull", async (req, res) => {
 });
 
 /* ── Projects ────────────────────────────────────────────────── */
+// A project id is one plain folder name under PROJECTS_DIR, confined with
+// realpath (resolveInside). Dots-only names, separators and dotfiles are refused.
+const PROJECT_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_\- .]{0,79}$/;
+function projectDirFor(name, opts) {
+  const n = String(name == null ? "" : name);
+  if (!PROJECT_NAME_RE.test(n) || n.includes("..") || /[ .]$/.test(n)) {
+    const e = new Error("invalid project name"); e.status = 400; throw e;
+  }
+  try { return resolveInside(PROJECTS_DIR, n, opts); }
+  catch (err) { const e = new Error("invalid project name"); e.status = 400; throw e; }
+}
+
 app.get("/api/projects", (_req, res) => {
   const projects = fs.readdirSync(PROJECTS_DIR, { withFileTypes:true })
     .filter(e => e.isDirectory() && !e.name.startsWith("."))
@@ -1058,9 +1095,9 @@ app.get("/api/projects/templates", (_req, res) => {
 });
 
 app.post("/api/projects", (req, res) => {
-  const { name, template = "blank" } = req.body;
+  const { name, template = "blank" } = req.body || {};
   if (!name) return res.status(400).json({ error:"name required" });
-  const p = path.join(PROJECTS_DIR, name.replace(/[^a-z0-9_\-. ]/gi,"_"));
+  const p = projectDirFor(safeSegment(String(name)), { write: true });
   fs.mkdirSync(p, { recursive:true });
   const safeName = path.basename(p);
   const mem = path.join(p,"gruda.md");
@@ -1070,7 +1107,7 @@ app.post("/api/projects", (req, res) => {
   const { files, template: applied } = projectTemplates.getTemplateFiles(template, safeName);
   const written = [];
   for (const [rel, content] of Object.entries(files)) {
-    const fp = path.join(p, rel.replace(/\\/g, "/"));
+    const fp = resolveInside(p, rel.replace(/\\/g, "/"), { write: true });
     fs.mkdirSync(path.dirname(fp), { recursive: true });
     fs.writeFileSync(fp, content, "utf8");
     written.push(rel);
@@ -1081,14 +1118,14 @@ app.post("/api/projects", (req, res) => {
 });
 
 app.get("/api/projects/:name/memory", (req, res) => {
-  const m = path.join(PROJECTS_DIR, req.params.name, "gruda.md");
+  const m = path.join(projectDirFor(req.params.name), "gruda.md");
   res.json({ content: fs.existsSync(m) ? fs.readFileSync(m,"utf8") : "" });
 });
 
 // Save / edit a project's gruda.md from the UI (also mirrored to Postgres)
 app.post("/api/projects/:name/memory", (req, res) => {
-  const safe = req.params.name.replace(/[^a-z0-9_\-. ]/gi, "_");
-  const dir  = path.join(PROJECTS_DIR, safe);
+  const dir  = projectDirFor(req.params.name, { write: true });
+  const safe = path.basename(dir);
   fs.mkdirSync(dir, { recursive: true });
   const content = req.body.content || "";
   fs.writeFileSync(path.join(dir, "gruda.md"), content, "utf8");
@@ -1255,6 +1292,7 @@ app.get("/api/treaty/room/:id/messages", async (req, res) => {
 });
 
 app.post("/api/treaty/room/:id/send", async (req, res) => {
+  if (!req.identity) return res.status(401).json({ error: "sign in required" });
   const roomId = treatyChat.normalizeRoomId(req.params.id);
   const sender = treatyChat.senderFromIdentity(req.identity);
   const text = String(req.body?.text || "").trim();
@@ -1270,6 +1308,7 @@ app.post("/api/treaty/room/:id/send", async (req, res) => {
 
 // Legacy endpoint — same as room send (default room: general)
 app.post("/api/treaty/send", async (req, res) => {
+  if (!req.identity) return res.status(401).json({ error: "sign in required" });
   const roomId = treatyChat.normalizeRoomId(req.body?.roomId || req.body?.room || "general");
   const sender = treatyChat.senderFromIdentity(req.identity);
   const text = String(req.body?.text || req.body?.message || "").trim();
@@ -1383,13 +1422,13 @@ app.get("/api/app/paths", (_req, res) => {
 // access via ?dir= / ?path=). Returns the resolved absolute path, or null if it
 // would escape the projects root. ?dir=C:\... or ../ traversal resolves outside
 // the base and is rejected.
-function safeProjectPath(rel) {
+function safeProjectPath(rel, opts) {
   // Accepts paths relative to PROJECTS_DIR, or absolute paths inside it.
   try {
     const base = path.resolve(PROJECTS_DIR);
     const r = String(rel || "");
     const relToBase = path.isAbsolute(r) ? path.relative(base, r) : r;
-    return resolveInside(base, relToBase || ".");
+    return resolveInside(base, relToBase || ".", opts);
   } catch { return null; }
 }
 
@@ -1455,7 +1494,7 @@ app.get("/api/ide/file", (req, res) => {
 });
 
 app.post("/api/ide/file", (req, res) => {
-  const p = safeProjectPath(req.body.path || req.body.p);
+  const p = safeProjectPath(req.body.path || req.body.p, { write: true });
   const { content } = req.body;
   if (!p) return res.status(400).json({ error: "invalid or missing path" });
   fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -2364,7 +2403,7 @@ app.post("/api/generate/launcher", (req, res) => {
    Returns all text files in a project dir as [{filePath, content}]
    ─────────────────────────────────────────────────────────────── */
 app.get("/api/projects/:name/files", (req, res) => {
-  const projDir = path.join(PROJECTS_DIR, req.params.name);
+  const projDir = projectDirFor(req.params.name);
   if (!fs.existsSync(projDir)) return res.status(404).json({ error: "Project not found" });
 
   const MAX_FILE_SIZE = 512 * 1024; // 512 KB
@@ -2375,7 +2414,7 @@ app.get("/api/projects/:name/files", (req, res) => {
   const results = [];
   function walk(dir, base = "") {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".") || entry.isSymbolicLink()) continue;
       const full = path.join(dir, entry.name);
       const rel  = base ? `${base}/${entry.name}` : entry.name;
       if (entry.isDirectory()) { walk(full, rel); }
@@ -2401,6 +2440,13 @@ app.get("*", (req, res, next) => {
   next();
 });
 
+/* ── API 404 + error handler (last) ──────────────────────────────── */
+app.use((req, res, next) => {
+  if (String(req.path || "").toLowerCase().startsWith("/api")) return res.status(404).json({ error: "not found" });
+  next();
+});
+app.use(errorHandler);
+
 /* ── WebSocket (browser clients) ─────────────────────────────── */
 wss.on("connection", (ws) => {
   const cfg = loadConfig();
@@ -2412,9 +2458,12 @@ wss.on("connection", (ws) => {
 // On Vercel (and other serverless hosts) we export the Express app instead of
 // binding a port. Locally and via the `gruda-agent` CLI, VERCEL is unset so the
 // HTTP + WebSocket server starts normally.
+// Local binds to 127.0.0.1 by default. Containers / LAN use set GRUDA_HOST=0.0.0.0
+// (the Dockerfile does), and then must sign in: local owner trust is opt-in.
+const HOST = process.env.GRUDA_HOST || "127.0.0.1";
 if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
-    console.log(`[gruda-agent] Running at http://localhost:${PORT}`);
+  server.listen(PORT, HOST, () => {
+    console.log(`[gruda-agent] Running at http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   });
 }
 

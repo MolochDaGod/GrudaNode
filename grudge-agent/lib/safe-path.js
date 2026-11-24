@@ -8,6 +8,11 @@
  *   - any path segment that starts with "." (dotfiles: .env, .git, .ssh, …)
  *   - env-style files (*.env, env.local, …) and key material (*.pem, *.key, id_rsa)
  *   - roots that are system folders (/, /proc, /sys, /dev, /etc, home itself)
+ *   - any symlink component when opts.write is set (a dangling or planted link
+ *     can't redirect a write), and broken links on reads
+ *   - links whose real target is a hidden / env / key file, even inside the root
+ * There's still an inherent check-then-use window; this closes the planted-link
+ * cases, which is the realistic one.
  */
 "use strict";
 const fs = require("fs");
@@ -44,6 +49,17 @@ function nearestExisting(p) {
   return cur;
 }
 
+function checkSegments(segs, raw) {
+  for (const s of segs) {
+    if (s.startsWith(".")) throw new PathError(`hidden files are blocked: ${raw}`);
+    if (BLOCKED_NAME.test(s)) throw new PathError(`blocked file name: ${s}`);
+  }
+}
+
+function insideBase(base, real) {
+  return real === base || real.startsWith(base + path.sep);
+}
+
 function resolveInside(root, p, opts) {
   opts = opts || {};
   const base = realRoot(root);
@@ -53,15 +69,26 @@ function resolveInside(root, p, opts) {
   const rel = path.relative(base, candidate);
   if (rel.startsWith("..") || path.isAbsolute(rel)) throw new PathError(`outside workspace: ${raw}`);
   const segs = rel ? rel.split(path.sep) : [];
+  checkSegments(segs, raw);
+  // Walk the components that exist without following links (lstat).
+  let cur = base;
   for (const s of segs) {
-    if (s.startsWith(".")) throw new PathError(`hidden files are blocked: ${raw}`);
-    if (BLOCKED_NAME.test(s)) throw new PathError(`blocked file name: ${s}`);
+    cur = path.join(cur, s);
+    let st;
+    try { st = fs.lstatSync(cur); } catch { break; } // the rest doesn't exist yet
+    if (!st.isSymbolicLink()) continue;
+    if (opts.write) throw new PathError(`writes through symlinks are blocked: ${raw}`);
+    let target;
+    try { target = fs.realpathSync(cur); } catch { throw new PathError(`broken link: ${raw}`); }
+    if (!insideBase(base, target)) throw new PathError(`outside workspace (link): ${raw}`);
+    checkSegments(path.relative(base, target).split(path.sep).filter(Boolean), raw);
   }
   // Follow symlinks: the real target (or its nearest existing parent) must stay inside.
   const existing = nearestExisting(candidate);
   const real = fs.realpathSync(existing);
-  if (real !== base && !real.startsWith(base + path.sep)) throw new PathError(`outside workspace (link): ${raw}`);
+  if (!insideBase(base, real)) throw new PathError(`outside workspace (link): ${raw}`);
   const finalPath = existing === candidate ? real : path.join(real, path.relative(existing, candidate));
+  checkSegments(path.relative(base, finalPath).split(path.sep).filter(Boolean), raw);
   if (opts.mustExist && !fs.existsSync(finalPath)) throw new PathError(`not found: ${raw}`);
   return finalPath;
 }

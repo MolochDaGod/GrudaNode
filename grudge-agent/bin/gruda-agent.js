@@ -77,7 +77,7 @@ async function main() {
 
   if (!NO_OPEN) {
     setTimeout(() => {
-      const url = `http://localhost:${PORT}`;
+      const url = `http://127.0.0.1:${PORT}`;
       const open = process.platform === "win32"  ? ["cmd",  ["/c", "start", url]]
                  : process.platform === "darwin" ? ["open", [url]]
                  : ["xdg-open", [url]];
@@ -86,6 +86,10 @@ async function main() {
   }
 
   process.env.PORT = String(PORT);
+  // The CLI is the owner's own machine: trust loopback requests as the local
+  // owner (opt-in; server.js never does this on its own). The server binds
+  // 127.0.0.1 unless GRUDA_HOST says otherwise.
+  if (process.env.GRUDA_LOCAL_TRUST == null) process.env.GRUDA_LOCAL_TRUST = "1";
   require(path.join(ROOT, "server.js"));
 }
 
